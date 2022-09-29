@@ -8,6 +8,7 @@ data Type_
     = T_Unit
     | T_Arrow Type_ Type_
     | T_Forall String Type_
+    | T_Variable String
 
 data Expression
     = E_Unit
