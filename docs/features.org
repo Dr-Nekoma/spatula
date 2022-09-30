@@ -1,0 +1,28 @@
+#+TITLE: Silverware Plus Desirable Features
+
+* Phase 1 (5 m.) | 30/09/2022 - XX/XX/XXXX 
+** TODO Silverware 90% backwards compatibility (Like C and C++)
+** TODO CI
+** TODO Algebraic Data Types
+** TODO Pattern Matching
+** TODO Disjunctive pattern matching
+** TODO Haskell guards
+** TODO Recursive Types
+** TODO Type Operators
+** TODO Prelude library with immutable data structures and builtins
+
+* Phase 2 (1 y.) | XX/XX/XXXX - XX/XX/XXXX
+** TODO Compilable 
+** TODO Type Inference
+** TODO Typeclasses
+** TODO Object System
+** TODO Macros
+** TODO Robust and useful REPL
+** TODO Hot partial reload (repl)
+
+* Phase 3 (2 y.) | XX/XX/XXXX - XX/XX/XXXX
+** TODO Well behaved exceptions
+** TODO Dynamic classification
+** TODO Type extensions
+** TODO Module and Namespace system
+** TODO Modal logic system
