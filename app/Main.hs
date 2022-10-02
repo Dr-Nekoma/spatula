@@ -1,6 +1,9 @@
 module Main (main) where
 
-import Lib
+import Evaluator
+import qualified Data.Map as Map
 
 main :: IO ()
-main = someFunc
+main = do
+  _ <- return $ eval Map.empty (ELiteral LUnit)
+  error "Evaluator is not yet ready!"

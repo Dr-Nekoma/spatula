@@ -1,6 +1,13 @@
-module Evaluator where
+module Evaluator
+  ( eval
+  , Literal (..)
+  , Expression (..)) where
 
-type Env = [(String, Value)]
+import qualified Data.Map as Map
+import Data.Text ( Text )
+import Result ( Result )
+
+type Env = Map.Map Text Value
 
 data Type
     = TUnit
@@ -8,8 +15,8 @@ data Type
     | TRational
     | TBool
     | TArrow Type Type
-    | TForall String Type
-    | TVariable String
+    | TForall Text Type
+    | TVariable Text
 
 data Literal
     = LUnit
@@ -19,19 +26,18 @@ data Literal
 
 data Expression
     = ELiteral Literal
-    | EVariable String
-    | EAbstraction String Type Expression
+    | EVariable Text
+    | EAbstraction Text Type Expression
     | EApplication Expression Expression
-    | ETypeAbstraction String Expression
+    | ETypeAbstraction Text Expression
     | ETypeApplication Expression Type
-    | EV Value
 
 data Value
     = VUnit
     | VLiteral Literal
-    | VClosure String Type Expression Env
+    | VClosure Text Type Expression Env
     | VNativeFunction Value Value
 
-eval :: Env -> Expression -> Either String Value
+eval :: Env -> Expression -> Result Value
 eval = undefined
 

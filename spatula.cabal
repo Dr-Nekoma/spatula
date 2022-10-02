@@ -26,7 +26,7 @@ source-repository head
 library
   exposed-modules:
       Evaluator
-      Lib
+      Result
   other-modules:
       Paths_spatula
   hs-source-dirs:
@@ -36,6 +36,7 @@ library
       attoparsec
     , base >=4.7 && <5
     , bytestring
+    , containers
     , envparse
     , optparse-applicative
     , terminal-size
@@ -55,6 +56,7 @@ executable spatula-exe
       attoparsec
     , base >=4.7 && <5
     , bytestring
+    , containers
     , envparse
     , optparse-applicative
     , spatula
@@ -76,6 +78,7 @@ test-suite spatula-test
       attoparsec
     , base >=4.7 && <5
     , bytestring
+    , containers
     , envparse
     , optparse-applicative
     , spatula
