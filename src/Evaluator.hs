@@ -74,10 +74,8 @@ eval env (ECondition cond thenBranch elseBranch) = do
         eval env elseBranch
     _ -> Left "Condition expression could not be evaluated to a boolean."
   
+eval env (ETypeAbstraction _ body) =
+  eval env body
 
-  
-eval env (ETypeAbstraction label body) = undefined
-
-eval env (ETypeApplication expr type') = undefined
-  
--- fun A -> fun (b: A) -> b
+eval env (ETypeApplication expr _) =
+  eval env expr
