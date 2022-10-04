@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Evaluator
   ( eval
   , Literal (..)
@@ -5,9 +6,9 @@ module Evaluator
 
 import qualified Data.Map as Map
 import Data.Text ( Text )
-import Result ( Result )
 
 type Env = Map.Map Text Value
+type Result = Either Text Value
 
 data Type
     = TUnit
@@ -38,6 +39,11 @@ data Value
     | VClosure Text Type Expression Env
     | VNativeFunction Value Value
 
-eval :: Env -> Expression -> Result Value
-eval = undefined
+eval :: Env -> Expression -> Result
+eval _ (ELiteral literal) = pure $ VLiteral literal
+eval env (EVariable label) =
+  case Map.lookup label env of
+    Nothing -> Left "Couldn't find your variable in the environment"
+    Just value -> pure value
+eval _ _ = undefined
 
