@@ -1,47 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Evaluator
-  ( eval
-  , Literal (..)
-  , Expression (..)) where
+module Evaluator ( eval ) where
 
+import Types
 import qualified Data.Map as Map
-import Data.Text ( Text )
-import Data.ByteString.Builder.Prim (condB)
-
-type Env = Map.Map Text Value
-type Result = Either Text Value
-
-data Type
-    = TUnit
-    | TInteger
-    | TRational
-    | TBool
-    | TArrow Type Type
-    | TForall Text Type
-    | TVariable Text
-
-data Literal
-    = LUnit
-    | LInteger Integer
-    | LRational Rational
-    | LBool Bool
-
-data Expression
-    = ELiteral Literal
-    | EVariable Text
-    | EAbstraction Text Type Expression
-    | EApplication Expression Expression
-    | ECondition Expression Expression Expression
-    | ETypeAbstraction Text Expression
-    | ETypeApplication Expression Type
+import Data.Text
 
 data Value
     = VUnit
     | VLiteral Literal
-    | VClosure Text Expression Env
-    | VNativeFunction (Value -> Result)
+    | VClosure Text Expression EvalEnv
+    | VNativeFunction (Value -> EvalResult)
 
-eval :: Env -> Expression -> Result
+instance Show Value where
+  show VUnit = "()"
+  show (VLiteral literal) = show literal
+  show (VClosure {}) = "<fun>"
+  show (VNativeFunction _) = "<native>"
+
+type EvalResult = Either Text Value
+type EvalEnv = Map.Map Text Value
+
+eval :: EvalEnv -> Expression -> EvalResult
 
 eval _ (ELiteral literal) = pure $ VLiteral literal
 
@@ -60,8 +39,8 @@ eval env (EApplication fun arg) = do
     VClosure label body closedEnv ->
       let newEnv = Map.insert label argValue closedEnv in
         eval newEnv body
-    VNativeFunction fun ->
-      fun argValue
+    VNativeFunction natFun ->
+      natFun argValue
     _ -> Left "Failed attempting to apply a value to something that is not a function."
 
 eval env (ECondition cond thenBranch elseBranch) = do

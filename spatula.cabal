@@ -26,6 +26,8 @@ source-repository head
 library
   exposed-modules:
       Evaluator
+      Typer
+      Types
   other-modules:
       Paths_spatula
   hs-source-dirs:
