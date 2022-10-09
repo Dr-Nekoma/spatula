@@ -30,6 +30,7 @@ dependencies:
 - envparse
 - transformers
 - attoparsec
+- scientific
 
 ghc-options:
 - -Wall
