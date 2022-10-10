@@ -1,10 +1,15 @@
 module Types
   ( Type (..)
-  , equal
   , Literal (..)
   , Expression (..))where
 
 import Data.Text ( Text )
+
+data TForallInfo = TForallInfo Text Type
+  deriving Show
+
+instance Eq TForallInfo where
+  (TForallInfo _ t1) == (TForallInfo _ t2) = t1 == t2  
 
 data Type
     = TUnit
@@ -13,12 +18,8 @@ data Type
     | TBool
     | TArrow Type Type
     | TVariable Text
-    | TForall Text Type
+    | TForall TForallInfo
     deriving (Eq, Show)
-
-equal :: Type -> Type -> Bool
-equal (TForall _ t1) (TForall _ t2) = t1 == t2
-equal t1 t2 = t1 == t2
 
 data Literal
     = LUnit

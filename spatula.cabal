@@ -27,6 +27,11 @@ library
   exposed-modules:
       Evaluator
       Parser
+      Parser.Condition
+      Parser.Expression
+      Parser.Literal
+      Parser.Types
+      Parser.Variable
       Typer
       Types
   other-modules:
@@ -35,13 +40,12 @@ library
       src
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
-      attoparsec
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , containers
     , envparse
     , optparse-applicative
-    , scientific
+    , parsec
     , terminal-size
     , text
     , transformers
@@ -56,13 +60,12 @@ executable spatula-exe
       app
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      attoparsec
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , containers
     , envparse
     , optparse-applicative
-    , scientific
+    , parsec
     , spatula
     , terminal-size
     , text
@@ -79,13 +82,12 @@ test-suite spatula-test
       test
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
-      attoparsec
-    , base >=4.7 && <5
+      base >=4.7 && <5
     , bytestring
     , containers
     , envparse
     , optparse-applicative
-    , scientific
+    , parsec
     , spatula
     , terminal-size
     , text

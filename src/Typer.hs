@@ -5,8 +5,8 @@ module Typer ( typeCheck ) where
 import Types
     ( Expression(..),
       Literal(LBool, LUnit, LInteger, LRational),
-      Type(TBool, TUnit, TInteger, TRational, TArrow),
-      equal )
+      Type(TBool, TUnit, TInteger, TRational, TArrow)
+    )
 import Data.Text ( Text )
 import Data.Set ( Set )
 import qualified Data.Map as Map
@@ -42,7 +42,7 @@ typeCheck env (EApplication fun arg) = do
   case funType of
     TArrow parameterType resultType -> do
       argType <- typeCheck env arg
-      if equal argType parameterType
+      if argType == parameterType
         then pure resultType
       else Left "Type mismatch between parameter and argument"
     _ -> Left "Failed attempting to type check something that is not a function"
@@ -53,7 +53,7 @@ typeCheck env (ECondition cond thenBranch elseBranch) = do
     TBool -> do
       thenType <- typeCheck env thenBranch
       elseType <- typeCheck env elseBranch
-      if equal thenType elseType
+      if thenType == elseType
         then pure thenType
         else Left "Type mismatch between branches in condition"
     _ -> Left "Predicate needs to be a boolean in condition"
