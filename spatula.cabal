@@ -27,7 +27,6 @@ library
   exposed-modules:
       Evaluator
       Parser
-      Parser.Condition
       Parser.Expression
       Parser.Literal
       Parser.Types

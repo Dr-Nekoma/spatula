@@ -64,16 +64,18 @@ exprCondition = ECondition <$> (openDelimiter *> string "if" *> body) <*> body <
 --        (optional (typed-variadic)))
 --      (seq (whitespaces*) (char "]"))))))
 
-fun :: (Text, Text) -> Expression -> Expression
-fun = EAbstraction . curry
-  
+-- fun :: (Text, Text) -> Expression -> Expression
+-- fun = EAbstraction . curry  
 
--- fold right from the body adding one argument at the time
-exprAbstraction :: ParserT st Expression
-exprAbstraction = do
-  _ <- openDelimiter *> string "lambda"
-  let arg_and_type = (,) <$> (anyVariable <* spaces) <*> (anyVariable <* spaces)
-  args <- openDelimiter *> (many arg_and_type) <* closeDelimiter
-  body <- spaces *> expression
-  _ <- closeDelimiter
-  pure $ Prelude.foldr fun body args
+typeP :: ParserT st Type
+typeP = undefined
+
+-- -- fold right from the body adding one argument at the time
+-- exprAbstraction :: ParserT st Expression
+-- exprAbstraction = do
+--   _ <- openDelimiter *> string "lambda"
+--   let arg_and_type = (,) <$> (anyVariable <* spaces) <*> (anyVariable <* spaces)
+--   args <- openDelimiter *> (many arg_and_type) <* closeDelimiter
+--   body <- spaces *> expression
+--   _ <- closeDelimiter
+--   pure $ Prelude.foldr fun body args
