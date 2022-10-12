@@ -30,6 +30,10 @@ dependencies:
 - envparse
 - transformers
 - parsec
+- hspec
+- QuickCheck
+- quickcheck-arbitrary-adt
+- quickcheck-text
 
 ghc-options:
 - -Wall
