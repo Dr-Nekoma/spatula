@@ -72,7 +72,7 @@ instance Show Literal where
 data Expression
     = ELiteral Literal
     | EVariable Text
-    | EAbstraction Text Type Expression
+    | EAbstraction Text Type Expression (Maybe Type)
     | EApplication Expression Expression
     | ECondition Expression Expression Expression
     | ETypeAbstraction Text Expression

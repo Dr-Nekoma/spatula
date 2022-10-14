@@ -2,7 +2,7 @@
 module Parser.Expression where
 
 import Types
-import Parser.Types
+import Parser.Utilities
 import Parser.Literal
 import Parser.Variable
 import Text.Parsec
@@ -66,9 +66,6 @@ exprCondition = ECondition <$> (openDelimiter *> string "if" *> body) <*> body <
 
 -- fun :: (Text, Text) -> Expression -> Expression
 -- fun = EAbstraction . curry  
-
-typeP :: ParserT st Type
-typeP = undefined
 
 -- -- fold right from the body adding one argument at the time
 -- exprAbstraction :: ParserT st Expression
