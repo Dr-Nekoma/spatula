@@ -1,11 +1,16 @@
-module Parser.Variable where
+module Parser.Variable
+  (
+    anyVariable
+  , delimiters
+  , invalidVariables
+  )
+where
 
-import Parser.Types
-import Types
-import Data.Set
-import Data.Text
-import Text.Parsec
-import Data.Char
+import Parser.Utilities ( ParserT )
+import Data.Set ( Set, fromList, member )
+import Data.Text ( Text, pack )
+import Text.Parsec ( satisfy, many1, parserFail )
+import Data.Char ( isAlphaNum, isSymbol )
 
 delimiters :: [String]
 delimiters = ["[", "]", "(", ")", "{", "}"]

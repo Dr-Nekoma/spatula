@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Evaluator ( eval ) where
 
-import Types
+import Types ( Expression(..), Literal(LBool) )
 import qualified Data.Map as Map
-import Data.Text
+import Data.Text ( Text )
 
 data Value
     = VUnit
@@ -29,7 +29,7 @@ eval env (EVariable label) =
     Nothing -> Left "Couldn't find your variable in the environment"
     Just value -> pure value
 
-eval env (EAbstraction label _ body) =
+eval env (EAbstraction label _ _ body) =
   pure $ VClosure label body env
 
 eval env (EApplication fun arg) = do

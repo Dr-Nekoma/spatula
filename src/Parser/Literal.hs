@@ -1,9 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Literal where
+module Parser.Literal (anyLiteral) where
 
-import Types
-import Parser.Types
-import Text.Parsec
+import Types ( Literal(..) )
+import Parser.Utilities ( ParserT )
+import Text.Parsec ( char, digit, string, many1, (<|>) )
   
 anyBoolean :: ParserT st Literal
 anyBoolean = LBool <$> (true <|> false)

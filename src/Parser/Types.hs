@@ -1,46 +1,65 @@
-module Parser.Types where
+{-# LANGUAGE OverloadedStrings #-}
+module Parser.Types (typeP) where
 
-import Types
-import Parser.Utilities
-import Parser.Literal
-import Parser.Variable
+import Types ( Type(..), TForallInfo(TForallInfo) )
+import Parser.Utilities ( ParserT )
+import Parser.Variable ( invalidVariables )
 import Text.Parsec
-import Data.Set
-import Data.Char
-import Data.Monoid
-import Data.Text
-import Text.Parsec.Token (GenTokenParser(whiteSpace))
+    ( anyChar,
+      char,
+      satisfy,
+      spaces,
+      string,
+      upper,
+      between,
+      many1,
+      (<|>),
+      parserFail )
+import Data.Set ( member )
+import Data.Char ( isAlphaNum, isSymbol )
+import Data.Text ( pack )
 
 typeP :: ParserT st Type
-typeP = undefined
+typeP = typeLiteral <|> typeArrow <|> typeForAll <|> typeVariable
+
+typeLiteral :: ParserT st Type
+typeLiteral = typeUnit <|> typeInteger <|> typeBool <|> typeRational
 
 typeUnit :: ParserT st Type
 typeUnit = TUnit <$ string "Unit"
 
-
 typeInteger :: ParserT st Type
 typeInteger = TInteger <$ string "Integer"
-
 
 typeBool :: ParserT st Type
 typeBool = TBool <$ string "Bool"
 
-
 typeRational :: ParserT st Type
 typeRational = TRational <$ string "Rational"
+
+curriedArrow :: [Type] -> Type -> Type
+curriedArrow types returnType = Prelude.foldr TArrow returnType types
+
+typeVariable :: ParserT st Type
+typeVariable = TVariable <$> variable
+  where variable = do
+          first <- upper
+          rest <- many1 (satisfy $ or . sequence [isAlphaNum, isSymbol])
+          let str = first : rest
+          if member str invalidVariables
+            then parserFail "Unexpected identifier for type variable name"
+            else return (pack str)
 
 typeArrow :: ParserT st Type
 typeArrow =
   let arrow = string "->" *> spaces
-      args = between (char "(" *> spaces) (spaces *> char ")") (many1 (spaces *> typeP))
-      returnP = spaces *> typeP in
-  between (char "(" *> spaces) (spaces *> char ")") (TArrow <$> (arrow *> args) <*> returnP)
+      args = between (char '(' *> spaces) (spaces *> char ')') (many1 (spaces *> typeP))
+      returnType = spaces *> typeP
+  in between (char '(' *> spaces) (spaces *> char ')') (curriedArrow <$> (arrow *> args) <*> returnType)
 
+typeForAll :: ParserT st Type
 typeForAll =
-  let abstract = between (string "forall" *> spaces) (string ".") (many1 anyChar)
-      arrow = (char "(" *> spaces) *> string "->" *> spaces
-      args = between (char "(" *> spaces) (spaces *> char ")") (many1 (spaces *> (typeP <|> (many1 anyChar))))
-      returnArrow = spaces *> (typeP <|> (many1 anyChar)) <* (spaces *> char ")")
-      forall = (abstract *> spaces) <*> (arrow *> args) <*> returnArrow
+  let abstract = between (string "forall" *> spaces) (char '.') (pack <$> many1 anyChar)
+      forall = TForallInfo <$> (abstract <* spaces) <*> typeP
   in
-  between (char "(" *> spaces) (spaces *> char ")") (TForall . TForallInfo <$> forall)
+  between (char '(' *> spaces) (spaces *> char ')') (TForall <$> forall)

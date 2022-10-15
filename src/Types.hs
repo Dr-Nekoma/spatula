@@ -1,10 +1,19 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Types where
+module Types
+  (
+    typeSubstitution
+  , TForallInfo(..)
+  , Type(..)
+  , Literal(..)
+  , Expression(..)
+  )
+where
 
-import Data.Text.Arbitrary
-import GHC.Generics
-import Test.QuickCheck
+import Data.Text.Arbitrary ( Text )
+import GHC.Generics ( Generic )
+import Test.QuickCheck ( Arbitrary(arbitrary) )
 import Test.QuickCheck.Arbitrary.ADT
+    ( ToADTArbitrary, genericArbitrary )
 
 typeSubstitution :: Text -> Type -> Type -> Type
 typeSubstitution placeHolder type' target =
@@ -72,7 +81,7 @@ instance Show Literal where
 data Expression
     = ELiteral Literal
     | EVariable Text
-    | EAbstraction Text Type Expression (Maybe Type)
+    | EAbstraction Text Type (Maybe Type) Expression
     | EApplication Expression Expression
     | ECondition Expression Expression Expression
     | ETypeAbstraction Text Expression

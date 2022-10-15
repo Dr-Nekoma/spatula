@@ -1,7 +1,7 @@
 [lambda [(F. A (b A)): A]
   b]
 
-(forall T. (-> (T T T) Integer))
+(forall T. T)
 
 [lambda [(arg (forall T. (-> (T) Integer)))]
   arg]

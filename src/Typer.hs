@@ -3,6 +3,11 @@
 module Typer ( typeCheck ) where
 
 import Types
+    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool),
+      Expression(..),
+      Literal(LBool, LUnit, LInteger, LRational),
+      typeSubstitution,
+      TForallInfo(TForallInfo) )
 import Data.Text ( Text )
 import qualified Data.Set as Set
 import qualified Data.Map as Map
@@ -28,10 +33,17 @@ typeCheckWithEnvironment TyperEnv{..} (EVariable label) =
     Nothing -> Left "Could not find yours variable's type in the environment"
     Just type' -> pure type'
 
-typeCheckWithEnvironment env (EAbstraction label type' expression) = do
+-- Remember to consider that the syntax receives multiples parameters and it does a transformation to curried notation
+-- and it has an optional annotated return type
+typeCheckWithEnvironment env (EAbstraction label type' returnType expression) = do
   let newEnv = Map.insert label type' (variableTypes env)
   resultType <- typeCheckWithEnvironment (env {variableTypes = newEnv}) expression
-  pure $ TArrow type' resultType
+  let possibleReturn = pure $ TArrow type' resultType
+  case returnType of
+        Just rt -> if rt == resultType
+                      then possibleReturn
+                      else Left "Body type does not match annotated return type"
+        Nothing -> possibleReturn
 
 typeCheckWithEnvironment env (EApplication fun arg) = do
   funType <- typeCheckWithEnvironment env fun

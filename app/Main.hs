@@ -6,5 +6,5 @@ import qualified Data.Map as Map
 
 main :: IO ()
 main = do
-  result <- return $ eval Map.empty (ELiteral LUnit)
+  let result = eval Map.empty (ELiteral LUnit)
   print result

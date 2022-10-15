@@ -1,15 +1,14 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Expression where
+module Parser.Expression (expressionP) where
 
 import Types
-import Parser.Utilities
-import Parser.Literal
-import Parser.Variable
+    ( Expression(EAbstraction, ELiteral, EVariable, ECondition) )
+import Parser.Utilities ( ParserT )
+import Parser.Literal ( anyLiteral )
+import Parser.Variable ( anyVariable )
+import Parser.Types ( typeP )
 import Text.Parsec
-import Data.Set
-import Data.Char
-import Data.Monoid
-import Data.Text
+    ( char, spaces, string, optionMaybe, (<|>), many )
 
 exprLiteral :: ParserT st Expression
 exprLiteral = ELiteral <$> anyLiteral
@@ -17,11 +16,11 @@ exprLiteral = ELiteral <$> anyLiteral
 exprVariable :: ParserT st Expression
 exprVariable = EVariable <$> anyVariable
 
-exprApplication :: ParserT st Expression
-exprApplication = undefined
+-- exprApplication :: ParserT st Expression
+-- exprApplication = undefined
   
-expression :: ParserT st Expression
-expression = undefined
+expressionP :: ParserT st Expression
+expressionP = exprVariable <|> exprCondition <|> exprLiteral <|> exprAbstraction 
 
 openDelimiter :: ParserT st Char
 openDelimiter = char '[' <* spaces
@@ -31,48 +30,15 @@ closeDelimiter = spaces *> char ']'
 
 exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string "if" *> body) <*> body <*> body <* closeDelimiter
-  where body = spaces *> expression <* spaces
+  where body = spaces *> expressionP <* spaces
 
--- (defun abstraction ()
---   (parser/map
---    #'ast:make-abstraction/1
---    (parser-header
---     (justRight
---      (seq (char "[") (whitespaces*))
---      (justLeft
---       (seq
---        (justRight (justLeft (prefix "lambda") (whitespaces*)) (parameters))
---        (many+ (justRight (whitespaces+) (expression))))
---       (seq (whitespaces*) (char "]")))))))
+exprAbstraction :: ParserT st Expression
+exprAbstraction = do
+  openDelimiter *> string "lambda" *> spaces
+  let arg_and_type = (,) <$> (char '(' *> spaces *> anyVariable <* spaces) <*> (typeP <* spaces <* char ')' <* spaces)
+  args <- openDelimiter *> many arg_and_type <* closeDelimiter
+  (returnType, body) <- (,) <$> (spaces *> optionMaybe typeP <* spaces) <*> expressionP <* closeDelimiter
+  let (lastText, lastType) = Prelude.last args
+      first = EAbstraction lastText lastType returnType body
+  pure $ Prelude.foldr (($ Nothing) . uncurry EAbstraction) first (Prelude.init args)
 
--- (defun parameters ()
---   (parser-header
---    (justRight
---     (seq (char "[") (whitespaces*))
---     (justLeft
---      (seq
---       (many*
---        (justLeft
--- 	(seq
--- 	 (justRight
--- 	  (seq (whitespaces*) (char "("))
--- 	  (justRight (whitespaces*) (identifier)))
--- 	 (justLeft
--- 	  (justRight (whitespaces+) (type))
--- 	  (seq (whitespaces*) (char ")"))))
--- 	(whitespaces*)))
---        (optional (typed-variadic)))
---      (seq (whitespaces*) (char "]"))))))
-
--- fun :: (Text, Text) -> Expression -> Expression
--- fun = EAbstraction . curry  
-
--- -- fold right from the body adding one argument at the time
--- exprAbstraction :: ParserT st Expression
--- exprAbstraction = do
---   _ <- openDelimiter *> string "lambda"
---   let arg_and_type = (,) <$> (anyVariable <* spaces) <*> (anyVariable <* spaces)
---   args <- openDelimiter *> (many arg_and_type) <* closeDelimiter
---   body <- spaces *> expression
---   _ <- closeDelimiter
---   pure $ Prelude.foldr fun body args
