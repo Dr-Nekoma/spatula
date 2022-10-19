@@ -31,7 +31,6 @@ library
       Parser.Literal
       Parser.Types
       Parser.Utilities
-      Parser.Variable
       Typer
       Types
   other-modules:

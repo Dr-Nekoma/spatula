@@ -65,18 +65,18 @@ data Literal
     | LInteger Integer
     | LRational Rational
     | LBool Bool
-    deriving (Generic, Eq)
+    deriving (Generic, Eq, Show)
 
 instance Arbitrary Literal where
   arbitrary = genericArbitrary
 
 instance ToADTArbitrary Literal
 
-instance Show Literal where
-  show LUnit = "()"
-  show (LInteger int) = show int
-  show (LRational rational) = show rational
-  show (LBool bool) = show bool
+-- instance Show Literal where
+--   show LUnit = "()"
+--   show (LInteger int) = show int
+--   show (LRational rational) = show rational
+--   show (LBool bool) = show bool
 
 data Expression
     = ELiteral Literal

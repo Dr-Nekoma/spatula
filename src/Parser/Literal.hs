@@ -1,25 +1,26 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Literal (anyLiteral) where
+module Parser.Literal where
 
 import Types ( Literal(..) )
 import Parser.Utilities ( ParserT )
-import Text.Parsec ( char, digit, string, many1, (<|>) )
+import Text.Parsec ( char, digit, string, many1, (<|>), try, choice )
   
-anyBoolean :: ParserT st Literal
-anyBoolean = LBool <$> (true <|> false)
+boolean :: ParserT st Literal
+boolean = LBool <$> (true <|> false)
    where true = True <$ char 'T'
          false = False <$ char 'F'
 
-anyInteger :: ParserT st Literal
-anyInteger = LInteger . read <$> many1 digit
+integer :: ParserT st Literal
+integer = LInteger . read <$> many1 digit
 
-anyUnit :: ParserT st Literal
-anyUnit = LUnit <$ string "()"
+unit :: ParserT st Literal
+unit = LUnit <$ string "()"
 
-anyRational :: ParserT st Literal
-anyRational = LRational <$> rational
-  where rational = (\l _ r -> read $ l ++ "%" ++ r) <$> numbers <*> char '/' <*> numbers
-        numbers = many1 digit
+rational :: ParserT st Literal
+rational = do
+  numerator <- many1 digit <* char '/'
+  denomintor <- many1 digit
+  return $ LRational . read $ numerator ++ "%" ++ denomintor 
 
-anyLiteral :: ParserT st Literal
-anyLiteral = anyUnit <|> anyInteger <|> anyRational <|> anyBoolean
+literal :: ParserT st Literal
+literal = choice $ fmap try [unit, rational, integer, boolean]

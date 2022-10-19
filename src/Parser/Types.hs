@@ -1,29 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Types (typeP) where
+module Parser.Types (typeP, typeVariable) where
 
 import Types ( Type(..), TForallInfo(TForallInfo) )
-import Parser.Utilities ( ParserT )
-import Parser.Variable ( invalidVariables )
+import Parser.Utilities ( ParserT, typeVariableGeneric)
 import Text.Parsec
-    ( anyChar,
-      char,
-      satisfy,
-      spaces,
-      string,
-      upper,
-      between,
-      many1,
-      (<|>),
-      parserFail )
-import Data.Set ( member )
-import Data.Char ( isAlphaNum, isSymbol )
+    ( string, spaces, char, anyChar, between, many1, choice, try )
 import Data.Text ( pack )
 
 typeP :: ParserT st Type
-typeP = typeLiteral <|> typeArrow <|> typeForAll <|> typeVariable
+typeP = choice $ fmap try [typeLiteral, typeArrow, typeForAll, typeVariable]
 
 typeLiteral :: ParserT st Type
-typeLiteral = typeUnit <|> typeInteger <|> typeBool <|> typeRational
+typeLiteral = choice $ fmap try [typeUnit, typeInteger, typeBool, typeRational]
 
 typeUnit :: ParserT st Type
 typeUnit = TUnit <$ string "Unit"
@@ -41,14 +29,7 @@ curriedArrow :: [Type] -> Type -> Type
 curriedArrow types returnType = Prelude.foldr TArrow returnType types
 
 typeVariable :: ParserT st Type
-typeVariable = TVariable <$> variable
-  where variable = do
-          first <- upper
-          rest <- many1 (satisfy $ or . sequence [isAlphaNum, isSymbol])
-          let str = first : rest
-          if member str invalidVariables
-            then parserFail "Unexpected identifier for type variable name"
-            else return (pack str)
+typeVariable = TVariable <$> typeVariableGeneric
 
 typeArrow :: ParserT st Type
 typeArrow =
