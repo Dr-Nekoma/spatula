@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Literal where
+module Parser.Literal ( literal ) where
 
 import Types ( Literal(..) )
 import Parser.Utilities ( ParserT )

@@ -33,6 +33,7 @@ library
       Parser.Utilities
       Typer
       Types
+      Utils
   other-modules:
       Paths_spatula
   hs-source-dirs:

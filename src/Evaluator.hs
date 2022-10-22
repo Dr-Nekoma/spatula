@@ -4,12 +4,13 @@ module Evaluator ( eval ) where
 import Types ( Expression(..), Literal(LBool) )
 import qualified Data.Map as Map
 import Data.Text ( Text )
+import Utils ( Result )
 
 data Value
     = VUnit
     | VLiteral Literal
     | VClosure Text Expression EvalEnv
-    | VNativeFunction (Value -> EvalResult)
+    | VNativeFunction (Value -> Result Value)
 
 instance Show Value where
   show VUnit = "()"
@@ -17,10 +18,9 @@ instance Show Value where
   show (VClosure {}) = "<fun>"
   show (VNativeFunction _) = "<native>"
 
-type EvalResult = Either Text Value
 type EvalEnv = Map.Map Text Value
 
-eval :: EvalEnv -> Expression -> EvalResult
+eval :: EvalEnv -> Expression -> Result Value
 
 eval _ (ELiteral literal) = pure $ VLiteral literal
 
@@ -53,7 +53,7 @@ eval env (ECondition cond thenBranch elseBranch) = do
         eval env elseBranch
     _ -> Left "Condition expression could not be evaluated to a boolean."
   
-eval env (ETypeAbstraction _ body) =
+eval env (ETypeAbstraction _ _ body) =
   eval env body
 
 eval env (ETypeApplication expr _) =

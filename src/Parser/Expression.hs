@@ -1,11 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Expression where
+module Parser.Expression (expressionP) where
 
 import Types
-    ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeApplication, ETypeAbstraction), Literal(..))
-import Parser.Utilities ( ParserT, variableGeneric, typeVariableGeneric )
+    ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeApplication), Literal(..))
+import Parser.Utilities --( ParserT, variableGeneric, typeVariableGeneric )
 import Parser.Literal ( literal )
-import Parser.Types ( typeP )
+import Parser.Types
 import Text.Parsec
     ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try )
 
@@ -28,10 +28,10 @@ exprApplication = do
     _ -> error "This should never happen 💣 | exprApplication and exprETypeApplication"
 
 exprETypeAbstraction :: ParserT st Expression
-exprETypeAbstraction = 
-  let typeVariables = many1 (typeVariableGeneric <* spaces)
-      curried list expr = foldr ETypeAbstraction expr list
-  in between openDelimiter closeDelimiter (curried <$> (string "forall" *> spaces *> typeVariables <* char '.' <* spaces) <*> expressionP)
+exprETypeAbstraction = undefined
+  -- let typeVariables = many1 (typeVariableGeneric <* spaces)
+  --     curried list expr = foldr ETypeAbstraction expr list
+  -- in between openDelimiter closeDelimiter (curried <$> (string "forall" *> spaces *> typeVariables <* char '.' <* spaces) <*> expressionP)
   
 expressionP :: ParserT st Expression
 expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprETypeAbstraction, exprAbstraction]

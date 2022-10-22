@@ -4,6 +4,7 @@ module Types
     typeSubstitution
   , TForallInfo(..)
   , Type(..)
+  , Kind(..)
   , Literal(..)
   , Expression(..)
   )
@@ -106,7 +107,7 @@ data Expression
     | EAbstraction Text Type (Maybe Type) Expression
     | EApplication Expression Expression
     | ECondition Expression Expression Expression
-    | ETypeAbstraction Text Expression
+    | ETypeAbstraction Text Kind Expression
     | ETypeApplication Expression Type
     deriving (Generic, Eq, Show)
 

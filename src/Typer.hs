@@ -3,24 +3,22 @@
 module Typer ( typeCheck ) where
 
 import Types
-    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool),
+    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction),
+      Kind(..),
       Expression(..),
       Literal(LBool, LUnit, LInteger, LRational),
       typeSubstitution,
       TForallInfo(TForallInfo) )
 import Data.Text ( Text )
-import qualified Data.Set as Set
+import Utils ( Result )
 import qualified Data.Map as Map
-
-type TyperResult = Either Text Type
-type KindResult = Either Text Kind
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
   , kindContext :: Map.Map Text Kind
   } deriving (Eq, Show)
 
-typeCheckWithEnvironment :: TyperEnv -> Expression -> TyperResult
+typeCheckWithEnvironment :: TyperEnv -> Expression -> Result Type
 
 typeCheckWithEnvironment _ (ELiteral literal) =
   let getType = case literal of
@@ -47,6 +45,7 @@ typeCheckWithEnvironment env (EAbstraction label type' returnType expression) = 
                       else Left "Body type does not match annotated return type"
         Nothing -> possibleReturn
 
+-- TODO: We need to do reduction at some point due to the potential type of expr  
 typeCheckWithEnvironment env (EApplication fun arg) = do
   funType <- typeCheckWithEnvironment env fun
   case funType of
@@ -68,43 +67,56 @@ typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
         else Left "Type mismatch between branches in condition"
     _ -> Left "Predicate needs to be a boolean in condition"
 
-typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label body) = do
-  let newBoundedTypes = Set.insert label boundedTypes
-  bodyType <- typeCheckWithEnvironment (env { boundedTypes = newBoundedTypes}) body
-  pure $ TForall $ TForallInfo label bodyType
-  
+typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind body) = do
+  let newKindEnv = Map.insert label kind kindContext
+  bodyType <- typeCheckWithEnvironment (env { kindContext = newKindEnv}) body
+  pure $ TForall $ TForallInfo label kind bodyType
+
+-- TODO: We need to do reduction at some point due to the potential type of expr  
 typeCheckWithEnvironment env (ETypeApplication expr type') = do
   functionType <- typeCheckWithEnvironment env expr
   case functionType of
     TForall (TForallInfo identifier kind identType) -> do
-      if kind == ??? then
-        pure $ typeSubstitution identifier type' identType
-      else
+     expectedKind <- kindCheckWithEnvironment env type'
+     if kind == expectedKind
+       then pure $ typeSubstitution identifier type' identType
+       else Left "Expected kind for type application does not match"
     _ -> Left "Cannot do a type application with a value that is not a type abstraction"
 
-typeCheck :: Expression -> TyperResult
-typeCheck = typeCheckWithEnvironment (TyperEnv Set.empty Map.empty)
+typeCheck :: Expression -> Result Type
+typeCheck = typeCheckWithEnvironment (TyperEnv Map.empty Map.empty)
 
-kindCheck :: TyperEnv -> Type -> KindResult
-kindCheck env@TyperEnv{..} type' =
+kindCheckWithEnvironment :: TyperEnv -> Type -> Result Kind
+kindCheckWithEnvironment env@TyperEnv{..} type' =
   case type' of
-    TUnit -> StarK
-    TInteger -> StarK
-    TRational -> StarK
-    TBool -> StarK
+    TUnit -> pure StarK
+    TInteger -> pure StarK
+    TRational -> pure StarK
+    TBool -> pure StarK
     TVariable label ->
       let kind = Map.lookup label kindContext in
-        case kind of
-          Just kind -> Right kind
-          Nothing -> Left "Unbound type variable."
+      maybe (Left "Unbound type variable.") Right kind
     TArrow input output -> do
-      kindInput <- kindCheck env input
-      kindOutput <- kindCheck env output
+      kindInput <- kindCheckWithEnvironment env input
+      kindOutput <- kindCheckWithEnvironment env output
       case (kindInput, kindOutput) of
         (StarK, StarK) -> pure StarK
-        _ -> Left ">:("
+        _ -> Left "Expression arrow must have kind * and it has something different"
+    TForall (TForallInfo identifier kind identType) -> do
+       let newEnv = Map.insert identifier kind kindContext
+       kindIdent <- kindCheckWithEnvironment (env {kindContext = newEnv}) identType
+       case kindIdent of
+        StarK -> pure StarK
+        _ -> Left "Foralls should return * but this has something different"
     TApplication abstractionType argumentType -> do
-      kindAbs <- kindCheck env abstractionType
-      kindArg <- kindCheck env argumentType
-      
-      
+      kindAbs <- kindCheckWithEnvironment env abstractionType
+      kindArg <- kindCheckWithEnvironment env argumentType
+      case kindAbs of
+        (ArrowK k1 k2) -> if k1 == kindArg
+                          then pure k2
+                          else Left "Kinds don't match in TApplication"
+        _ -> Left "Type abstraction is not a arrow kind"
+    TAbstraction label kind bodyType -> do
+      let newEnv = Map.insert label kind kindContext
+      kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
+      pure $ ArrowK kind kindBody      
