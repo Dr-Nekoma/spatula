@@ -22,8 +22,18 @@ typeSubstitution placeHolder type' target =
       TArrow
       (typeSubstitution placeHolder type' parameter)
       (typeSubstitution placeHolder type' returnType)
-    TForall info@(TForallInfo identifier type'') | identifier == placeHolder -> TForall info
-                                                 | otherwise -> TForall (TForallInfo identifier (typeSubstitution placeHolder type' type''))
+    TApplication abstractionType argumentType ->
+      TApplication
+        (typeSubstitution placeHolder type' abstractionType)
+        (typeSubstitution placeHolder type' argumentType)
+    typeAbstraction@(TAbstraction label kind type'')
+      | label == placeHolder ->
+          typeAbstraction
+      | otherwise ->
+          TAbstraction label kind (typeSubstitution placeHolder type' type'')
+    TForall info@(TForallInfo identifier kind type'')
+      | identifier == placeHolder -> TForall info
+      | otherwise -> TForall (TForallInfo identifier kind (typeSubstitution placeHolder type' type''))
     TVariable identifier | identifier == placeHolder -> type'
                          | otherwise -> TVariable identifier
     TUnit -> TUnit
@@ -31,7 +41,15 @@ typeSubstitution placeHolder type' target =
     TRational -> TRational
     TBool -> TBool
 
-data TForallInfo = TForallInfo Text Type
+data Kind =
+    StarK
+  | ArrowK Kind Kind
+  deriving (Eq, Generic, Show)
+
+instance Arbitrary Kind where
+  arbitrary = genericArbitrary
+
+data TForallInfo = TForallInfo Text Kind Type
   deriving (Generic, Show)
 
 instance Arbitrary TForallInfo where
@@ -40,10 +58,12 @@ instance Arbitrary TForallInfo where
 instance ToADTArbitrary TForallInfo
 
 instance Eq TForallInfo where
-  (TForallInfo ident1 type1) == (TForallInfo ident2 type2) =
-    if ident1 == ident2
-    then type1 == type2
-    else type1 == typeSubstitution ident2 (TVariable ident1) type2
+  (TForallInfo ident1 kind1 type1) == (TForallInfo ident2 kind2 type2) =
+    if kind1 == kind2 then
+      if ident1 == ident2
+      then type1 == type2
+      else type1 == typeSubstitution ident2 (TVariable ident1) type2
+    else False
 
 data Type
     = TUnit
@@ -53,6 +73,8 @@ data Type
     | TArrow Type Type
     | TVariable Text
     | TForall TForallInfo
+    | TApplication Type Type
+    | TAbstraction Text Kind Type
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Type where

@@ -13,9 +13,11 @@ import qualified Data.Set as Set
 import qualified Data.Map as Map
 
 type TyperResult = Either Text Type
+type KindResult = Either Text Kind
+
 data TyperEnv = TyperEnv
-  { boundedTypes :: Set.Set Text
-  , variableTypes :: Map.Map Text Type
+  { variableTypes :: Map.Map Text Type
+  , kindContext :: Map.Map Text Kind
   } deriving (Eq, Show)
 
 typeCheckWithEnvironment :: TyperEnv -> Expression -> TyperResult
@@ -30,7 +32,7 @@ typeCheckWithEnvironment _ (ELiteral literal) =
 
 typeCheckWithEnvironment TyperEnv{..} (EVariable label) =
   case Map.lookup label variableTypes of
-    Nothing -> Left "Could not find yours variable's type in the environment"
+    Nothing -> Left "Could not find your variable's type in the environment"
     Just type' -> pure type'
 
 -- Remember to consider that the syntax receives multiples parameters and it does a transformation to curried notation
@@ -74,9 +76,35 @@ typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label body) = do
 typeCheckWithEnvironment env (ETypeApplication expr type') = do
   functionType <- typeCheckWithEnvironment env expr
   case functionType of
-    TForall (TForallInfo identifier identType) -> do
-      pure $ typeSubstitution identifier type' identType
+    TForall (TForallInfo identifier kind identType) -> do
+      if kind == ??? then
+        pure $ typeSubstitution identifier type' identType
+      else
     _ -> Left "Cannot do a type application with a value that is not a type abstraction"
 
 typeCheck :: Expression -> TyperResult
 typeCheck = typeCheckWithEnvironment (TyperEnv Set.empty Map.empty)
+
+kindCheck :: TyperEnv -> Type -> KindResult
+kindCheck env@TyperEnv{..} type' =
+  case type' of
+    TUnit -> StarK
+    TInteger -> StarK
+    TRational -> StarK
+    TBool -> StarK
+    TVariable label ->
+      let kind = Map.lookup label kindContext in
+        case kind of
+          Just kind -> Right kind
+          Nothing -> Left "Unbound type variable."
+    TArrow input output -> do
+      kindInput <- kindCheck env input
+      kindOutput <- kindCheck env output
+      case (kindInput, kindOutput) of
+        (StarK, StarK) -> pure StarK
+        _ -> Left ">:("
+    TApplication abstractionType argumentType -> do
+      kindAbs <- kindCheck env abstractionType
+      kindArg <- kindCheck env argumentType
+      
+      
