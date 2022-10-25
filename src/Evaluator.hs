@@ -3,8 +3,9 @@ module Evaluator ( eval ) where
 
 import Types ( Expression(..), Literal(LBool) )
 import qualified Data.Map as Map
-import Data.Text ( Text )
+import Data.Text ( Text, unpack, pack )
 import Utils ( Result )
+import Text.Printf ( printf )
 
 data Value
     = VUnit
@@ -16,45 +17,48 @@ instance Show Value where
   show VUnit = "()"
   show (VLiteral literal) = show literal
   show (VClosure {}) = "<fun>"
-  show (VNativeFunction _) = "<native>"
+  show (VNativeFunction _) = "<builtin>"
 
 type EvalEnv = Map.Map Text Value
 
-eval :: EvalEnv -> Expression -> Result Value
+evalWithEnvironment :: EvalEnv -> Expression -> Result Value
 
-eval _ (ELiteral literal) = pure $ VLiteral literal
+evalWithEnvironment _ (ELiteral literal) = pure $ VLiteral literal
 
-eval env (EVariable label) =
+evalWithEnvironment env (EVariable label) =
   case Map.lookup label env of
-    Nothing -> Left "Couldn't find your variable in the environment"
-    Just value -> pure value
+    Nothing -> Left $ pack $ printf "ERROR: Unbound variable %s in the environment." (unpack label)
+    Just var -> Right var
 
-eval env (EAbstraction label _ _ body) =
+evalWithEnvironment env (EAbstraction label _ _ body) =
   pure $ VClosure label body env
 
-eval env (EApplication fun arg) = do
-  funValue <- eval env fun
-  argValue <- eval env arg
+evalWithEnvironment env (EApplication fun arg) = do
+  funValue <- evalWithEnvironment env fun
+  argValue <- evalWithEnvironment env arg
   case funValue of
     VClosure label body closedEnv ->
       let newEnv = Map.insert label argValue closedEnv in
-        eval newEnv body
+        evalWithEnvironment newEnv body
     VNativeFunction natFun ->
       natFun argValue
-    _ -> Left "Failed attempting to apply a value to something that is not a function."
+    other -> Left $ pack $ printf "ERROR: Attempted to apply value %s to %s that it is not a function." (show argValue) (show other)
 
-eval env (ECondition cond thenBranch elseBranch) = do
-  test <- eval env cond
+evalWithEnvironment env (ECondition cond thenBranch elseBranch) = do
+  test <- evalWithEnvironment env cond
   case test of
     VLiteral (LBool b) ->
       if b then
-        eval env thenBranch
+        evalWithEnvironment env thenBranch
       else
-        eval env elseBranch
-    _ -> Left "Condition expression could not be evaluated to a boolean."
+        evalWithEnvironment env elseBranch
+    cond' -> Left $ pack $ printf "ERROR: The condition %s is not a bool." (show cond')
   
-eval env (ETypeAbstraction _ _ body) =
-  eval env body
+evalWithEnvironment env (ETypeAbstraction _ _ body) =
+  evalWithEnvironment env body
 
-eval env (ETypeApplication expr _) =
-  eval env expr
+evalWithEnvironment env (ETypeApplication expr _) =
+  evalWithEnvironment env expr
+
+eval :: Expression -> Result Value
+eval = evalWithEnvironment Map.empty
