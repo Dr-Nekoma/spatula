@@ -7,6 +7,7 @@ module Types
   , Kind(..)
   , Literal(..)
   , Expression(..)
+  , LetKind(..)
   )
 where
 
@@ -101,9 +102,16 @@ instance ToADTArbitrary Literal
 --   show (LRational rational) = show rational
 --   show (LBool bool) = show bool
 
+data LetKind = In | Plus
+  deriving (Generic, Eq, Show)
+
+instance Arbitrary LetKind where
+  arbitrary = genericArbitrary
+
 data Expression
     = ELiteral Literal
     | EVariable Text
+    | ELet LetKind [(Text, Expression)] Expression
     | EAbstraction Text Type (Maybe Type) Expression
     | EApplication Expression Expression
     | ECondition Expression Expression Expression

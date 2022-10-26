@@ -6,12 +6,14 @@ import Types
     ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction),
       Kind(..),
       Expression(..),
+      LetKind(..),
       Literal(LBool, LUnit, LInteger, LRational),
       typeSubstitution,
       TForallInfo(TForallInfo) )
-import Data.Text
+import Data.Text (pack, Text)
 import Text.Printf ( printf )
 import Utils ( Result )
+import Data.Traversable
 import qualified Data.Map as Map
 
 data TyperEnv = TyperEnv
@@ -33,6 +35,18 @@ typeCheckWithEnvironment TyperEnv{..} (EVariable label) =
   case Map.lookup label variableTypes of
     Nothing -> Left $ pack $ printf "TYPE ERROR: Unbound variable %s in the environment." label
     Just type' -> pure type'
+
+typeCheckWithEnvironment env@TyperEnv{..} (ELet In bindings body) = do
+  let (labels, expressions) = unzip bindings
+  typedExpressions <- for expressions (typeCheckWithEnvironment env)
+  let newEnv = foldl f variableTypes (zip labels typedExpressions)
+      f acc (label, expression) = Map.insert label expression acc
+  typeCheckWithEnvironment (env {variableTypes = newEnv}) body
+
+typeCheckWithEnvironment env (ELet Plus [] body) = typeCheckWithEnvironment env body
+typeCheckWithEnvironment env@TyperEnv{..} (ELet Plus ((label, expr):xs) body) = do
+  typedExpression <- typeCheckWithEnvironment env expr
+  typeCheckWithEnvironment (env { variableTypes = Map.insert label typedExpression variableTypes}) (ELet Plus xs body)
 
 -- Remember to consider that the syntax receives multiples parameters and it does a transformation to curried notation
 -- and it has an optional annotated return type

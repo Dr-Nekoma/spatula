@@ -1,11 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Evaluator ( eval ) where
 
-import Types ( Expression(..), Literal(LBool) )
+import Types ( Expression(..), Literal(LBool), LetKind(..) )
 import qualified Data.Map as Map
 import Data.Text ( Text, unpack, pack )
 import Utils ( Result )
 import Text.Printf ( printf )
+import Data.Traversable
 
 data Value
     = VUnit
@@ -53,7 +54,21 @@ evalWithEnvironment env (ECondition cond thenBranch elseBranch) = do
       else
         evalWithEnvironment env elseBranch
     cond' -> Left $ pack $ printf "ERROR: The condition %s is not a bool." (show cond')
-  
+
+evalWithEnvironment env (ELet In bindings body) = do
+  let (labels, expressions) = unzip bindings
+  evaluatedExpressions <- for expressions (evalWithEnvironment env)
+  let newEnv = foldl f env (zip labels evaluatedExpressions)
+      f acc (label, expression) = Map.insert label expression acc
+  evalWithEnvironment newEnv body
+
+evalWithEnvironment env (ELet Plus [] body) = evalWithEnvironment env body
+evalWithEnvironment env (ELet Plus ((label, expr):xs) body) = do
+  evaluatedExpression <- evalWithEnvironment env expr
+  evalWithEnvironment (Map.insert label evaluatedExpression env) (ELet Plus xs body)
+
+--evalWithEnvironment env (ELet Star bindings@((label, expr):_) _) = undefined
+
 evalWithEnvironment env (ETypeAbstraction _ _ body) =
   evalWithEnvironment env body
 
