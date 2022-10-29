@@ -13,26 +13,59 @@
     
 ** Grammar
 
+*** Types
+
   - Boolean = "T" | "F"
   - Left-Delimiter = "["
   - Right-Delimiter =  "]"
   - Literal = Integer | Boolean
   - Identifier = String
   - Application = Left-Delimiter WhiteSpace* Expression [WhiteSpace+ Expression]* WhiteSpace* Right-Delimiter
-  - Parameters = Left-Delimiter WhiteSpace* [Typed-Parameter WhiteSpace*]* Typed-Variadic WhiteSpace* Right-Delimiter\
+  - Parameters = Left-Delimiter WhiteSpace* [Typed-Parameter WhiteSpace*]* WhiteSpace* Right-Delimiter
   - Typed-Parameter = Type-Left-Delimiter WhiteSpace* Identifier WhiteSpace+ Type WhiteSpace* Type-Right-Delimiter
-  - Typed-Variadic = ["&" Type-Left-Delimiter WhiteSpace* Identifier WhiteSpace+ Type WhiteSpace* Type-Right-Delimiter]?
-  - Typed-Variadic-Arg = [WhiteSpace+ "&" Type]
-  - Args = Type-Left-Delimiter Non-Empty-Args? Typed-Variadic-Arg? WhiteSpace* Type-Right-Delimiter
-  - Non-Empty-Args = [WhiteSpace* Type]+
   - Type-Left-Delimiter = "("
   - Type-Right-Delimiter = ")"  
   - Type-Atom = "Integer" | "Boolean"
-  - Type-Arrow = Type-Left-Delimiter WhiteSpace* "->" WhiteSpace* Args WhiteSpaces* Type WhiteSpace* Type-Right-Delimiter
-  - Type = Type-Atom | Type-Arrow
+  - Type-Arrow = ArrowList Type
+  - Type-Variable = ''' Identifier
+  - Type = Type-Atom | Type-Arrow | Type-Variable | Type-Forall | Type-Abstraction | Type-Application
   - Abstraction = Left-Delimiter WhiteSpace* "lambda" WhiteSpace+ Parameters [WhiteSpace+ Expression]+ WhiteSpace* Right-Delimiter
   - Condition = Left-Delimiter WhiteSpace* "if" WhiteSpace+ Expression WhiteSpace+ Expression WhiteSpace+ Expression WhiteSpace* Right-Delimiter
   - Variable = Identifier
   - Expression =  Literal | Application | Abstraction | Variable | Condition
   - WhiteSpace = " " | "\n" | "\t" | "\r\t" | "\r\n" | "\c"
-  - File = WhiteSpace* Expression WhiteSpace*
+  - File = WhiteSpace* [Declaration WhiteSpace*]* EOF
+  - Declaration = Expression | Type-Declaration | Value | Functions
+  - Type-Declaration = ADT | Records
+  - ArrowList a = Type-Left-Delimiter WhiteSpace* "->" WhiteSpace* (List a) WhiteSpaces* a WhiteSpace* Type-Right-Delimiter
+  - List a = Type-Left-Delimiter [WhiteSpace* a]+ WhiteSpace* Type-Right-Delimiter
+
+*** Kinds
+  - Kind = Kind-Star | Kind-ArrowStar
+  - Kind-Star = "*"
+  - Kind-ArrowStar = ArrowList Kind
+
+
+* Aliases
+[deftype Abc {|A : Integer|}]
+[defalias Abc Integer]
+
+* ADT
+[defalgebraic Abc('T)
+  (A Integer Integer)
+  (B 'T)
+  (C)]
+
+* Values
+[deflet x 123]
+
+* Functions
+[defun f [(a Integer)
+          (b Number)]
+  [+ a b]]
+
+* Records
+[defrecord Name('T 'U) 
+  (A Integer)
+  (B 'T)
+  (C)]

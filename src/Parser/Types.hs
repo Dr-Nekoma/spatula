@@ -1,14 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Parser.Types (typeP, typeVariable) where
 
-import Types ( Type(..))
-import Parser.Utilities ( ParserT, typeVariableGeneric)
+import Types
+import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP)
 import Text.Parsec
---    ( string, spaces, char, anyChar, between, many1, choice, try )
--- import Data.Text ( pack )
 
 typeP :: ParserT st Type
-typeP = choice $ fmap try [typeLiteral, typeArrow, typeForAll, typeVariable]
+typeP = choice $ fmap try [typeLiteral, arrowP typeP, typeForAll, typeVariable]
 
 typeLiteral :: ParserT st Type
 typeLiteral = choice $ fmap try [typeUnit, typeInteger, typeBool, typeRational]
@@ -25,18 +23,8 @@ typeBool = TBool <$ string "Bool"
 typeRational :: ParserT st Type
 typeRational = TRational <$ string "Rational"
 
--- curriedArrow :: [Type] -> Type -> Type
--- curriedArrow types returnType = Prelude.foldr TArrow returnType types
-
 typeVariable :: ParserT st Type
 typeVariable = TVariable <$> typeVariableGeneric
-
-typeArrow :: ParserT st Type
-typeArrow = undefined
-  -- let arrow = string "->" *> spaces
-  --     args = between (char '(' *> spaces) (spaces *> char ')') (many1 (spaces *> typeP))
-  --     returnType = spaces *> typeP
-  -- in between (char '(' *> spaces) (spaces *> char ')') (curriedArrow <$> (arrow *> args) <*> returnType)
 
 typeForAll :: ParserT st Type
 typeForAll = undefined
@@ -44,3 +32,4 @@ typeForAll = undefined
   --     forall = TForallInfo <$> (abstract <* spaces) <*> typeP
   -- in
   -- between (char '(' *> spaces) (spaces *> char ')') (TForall <$> forall)
+

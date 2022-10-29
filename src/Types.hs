@@ -1,15 +1,5 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Types
-  (
-    typeSubstitution
-  , TForallInfo(..)
-  , Type(..)
-  , Kind(..)
-  , Literal(..)
-  , Expression(..)
-  , LetKind(..)
-  )
-where
+module Types where
 
 import Data.Text.Arbitrary ( Text )
 import GHC.Generics ( Generic )
@@ -43,10 +33,16 @@ typeSubstitution placeHolder type' target =
     TRational -> TRational
     TBool -> TBool
 
+class Curryable a where  
+    kurry :: a -> a -> a
+
 data Kind =
     StarK
   | ArrowK Kind Kind
   deriving (Eq, Generic, Show)
+
+instance Curryable Kind where
+  kurry = ArrowK
 
 instance Arbitrary Kind where
   arbitrary = genericArbitrary
@@ -78,6 +74,9 @@ data Type
     | TApplication Type Type
     | TAbstraction Text Kind Type
     deriving (Generic, Eq, Show)
+
+instance Curryable Type where
+  kurry = TArrow
 
 instance Arbitrary Type where
   arbitrary = genericArbitrary
