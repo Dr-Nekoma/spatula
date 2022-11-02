@@ -1,9 +1,9 @@
 
 
 * DONE Kinds
-* TODO Let Plus
-* TODO Let In
-* TODO ETypeAbs
-* TODO ETypeApp
+* DONE Let Plus
+* DONE Let In
+* DONE TForall
+* DONE ETypeAbs
 * TODO TAbs
 * TODO TApp

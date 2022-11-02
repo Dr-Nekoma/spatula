@@ -101,20 +101,20 @@ instance ToADTArbitrary Literal
 --   show (LRational rational) = show rational
 --   show (LBool bool) = show bool
 
-data LetKind = In | Plus
+data LetSort = In | Plus
   deriving (Generic, Eq, Show)
 
-instance Arbitrary LetKind where
+instance Arbitrary LetSort where
   arbitrary = genericArbitrary
 
 data Expression
     = ELiteral Literal
     | EVariable Text
-    | ELet LetKind [(Text, Expression)] Expression
+    | ELet LetSort [(Text, Expression)] Expression
     | EAbstraction Text Type (Maybe Type) Expression
     | EApplication Expression Expression
     | ECondition Expression Expression Expression
-    | ETypeAbstraction Text Kind Expression
+    | ETypeAbstraction Text Kind (Maybe Type) Expression
     | ETypeApplication Expression Type
     deriving (Generic, Eq, Show)
 

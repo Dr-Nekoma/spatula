@@ -7,7 +7,7 @@
 
 'T -> 'T -> Integer
 
-[lambda [(arg (forall T. (-> (T T T T T) Integer)))] arg]
+[lambda [(arg (forall T. * ; T))] arg]
 
 [when] = [if] without else
 [unless]
@@ -43,6 +43,14 @@
 	[+ abc def]]
 
 fun (arg: forall T. (T -> Integer)) -> arg
+
+[[lambda
+	[(x *)
+	 (y (-> (* *) *))
+	 :Integer]
+	 BODY]
+
+!abc
 
 [[lambda
 	[(x Integer)

@@ -1,8 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Kind ( kindP ) where
+module Parser.Kinds ( kindP ) where
 
 import Types
-import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP)
+import Parser.Utilities ( ParserT, arrowP)
 import Text.Parsec ( string, choice, try )
 
 kindP :: ParserT st Kind

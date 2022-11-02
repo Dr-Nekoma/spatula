@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Evaluator ( eval ) where
 
-import Types ( Expression(..), Literal(LBool), LetKind(..) )
+import Types ( Expression(..), Literal(LBool), LetSort(..) )
 import qualified Data.Map as Map
 import Data.Text ( Text, unpack, pack )
 import Utils ( Result )
@@ -69,7 +69,7 @@ evalWithEnvironment env (ELet Plus ((label, expr):xs) body) = do
 
 --evalWithEnvironment env (ELet Star bindings@((label, expr):_) _) = undefined
 
-evalWithEnvironment env (ETypeAbstraction _ _ body) =
+evalWithEnvironment env (ETypeAbstraction _ _ _ body) =
   evalWithEnvironment env body
 
 evalWithEnvironment env (ETypeApplication expr _) =

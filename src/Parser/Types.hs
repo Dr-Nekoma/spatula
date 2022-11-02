@@ -2,6 +2,7 @@
 module Parser.Types (typeP, typeVariable) where
 
 import Types
+import Parser.Kinds
 import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP)
 import Text.Parsec
 
@@ -26,10 +27,10 @@ typeRational = TRational <$ string "Rational"
 typeVariable :: ParserT st Type
 typeVariable = TVariable <$> typeVariableGeneric
 
+-- Type-Forall = Enclosed-Type ("forall" WhiteSpace+ Type-Variable WhiteSpace* "." WhiteSpace* Kind WhiteSpace* ";" WhiteSpace* Type)
+
 typeForAll :: ParserT st Type
-typeForAll = undefined
-  -- let abstract = between (string "forall" *> spaces) (char '.') (pack <$> many1 anyChar)
-  --     forall = TForallInfo <$> (abstract <* spaces) <*> typeP
-  -- in
-  -- between (char '(' *> spaces) (spaces *> char ')') (TForall <$> forall)
+typeForAll = do
+  something <- between (string "forall" *> spaces) (spaces *> char ';') (TForallInfo <$> (typeVariableGeneric <* spaces <* char '.' <* spaces) <*> kindP)
+  between (char '(' *> spaces) (spaces *> char ')') (TForall . something <$> typeP)
 

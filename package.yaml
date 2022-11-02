@@ -2,12 +2,12 @@ name:                spatula
 version:             0.1.0.0
 github:              "githubuser/spatula"
 license:             BSD3
-author:              "Author name here"
-maintainer:          "example@example.com"
-copyright:           "2022 Author name here"
+author:              "Dr.Nekoma"
+maintainer:          "drnekoma@gmail.com"
+copyright:           "2022 Dr.Nekoma"
 
 extra-source-files:
-- README.md
+- README.org
 - CHANGELOG.md
 
 # Metadata used when publishing your package

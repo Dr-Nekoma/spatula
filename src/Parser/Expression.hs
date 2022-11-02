@@ -2,10 +2,11 @@
 module Parser.Expression (expressionP) where
 
 import Types
-    ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeApplication), Literal(..))
+    ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeAbstraction, ETypeApplication, ELet), LetSort(..), Literal(..))
 import Parser.Utilities --( ParserT, variableGeneric, typeVariableGeneric )
 import Parser.Literal ( literal )
 import Parser.Types
+import Parser.Kinds
 import Text.Parsec
     ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try )
 
@@ -26,15 +27,9 @@ exprApplication = do
     ((Right _):_) -> parserFail "Unexpected type for application or type application"
     ((Left fun):args) -> return $ foldl function fun args
     _ -> error "This should never happen 💣 | exprApplication and exprETypeApplication"
-
-exprETypeAbstraction :: ParserT st Expression
-exprETypeAbstraction = undefined
-  -- let typeVariables = many1 (typeVariableGeneric <* spaces)
-  --     curried list expr = foldr ETypeAbstraction expr list
-  -- in between openDelimiter closeDelimiter (curried <$> (string "forall" *> spaces *> typeVariables <* char '.' <* spaces) <*> expressionP)
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprETypeAbstraction, exprAbstraction]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprAbstraction, letP]
 
 openDelimiter :: ParserT st Char
 openDelimiter = char '[' <* spaces
@@ -49,10 +44,19 @@ exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <
 exprAbstraction :: ParserT st Expression
 exprAbstraction = do
   openDelimiter *> string "lambda" *> spaces
-  let arg_and_type = (,) <$> (char '(' *> spaces *> variableGeneric <* spaces) <*> (typeP <* spaces <* char ')' <* spaces)
-  args <- openDelimiter *> many arg_and_type <* closeDelimiter
+  let argAnd a = (,) <$> (char '(' *> spaces *> variableGeneric <* spaces) <*> (a <* spaces <* char ')' <* spaces)
+  args <- openDelimiter *> many (fmap Left (argAnd typeP) <|> fmap Right (argAnd kindP)) <* closeDelimiter
   (returnType, body) <- (,) <$> (spaces *> char ':' *> optionMaybe typeP <* spaces) <*> expressionP <* closeDelimiter
-  let (lastText, lastType) = Prelude.last args
-      first = EAbstraction lastText lastType returnType body
-  pure $ Prelude.foldr (($ Nothing) . uncurry EAbstraction) first (Prelude.init args)
+  let fun (Right item) = ($ Nothing) . uncurry ETypeAbstraction $ item
+      fun (Left item) = ($ Nothing) . uncurry EAbstraction $ item
+      first = case Prelude.last args of
+                Left (lastText, lastType) -> EAbstraction lastText lastType returnType body
+                Right (lastText, lastKind) -> ETypeAbstraction lastText lastKind returnType body
+  pure $ Prelude.foldr fun first (Prelude.init args)
 
+letP :: ParserT st Expression
+letP =  do
+  let letSortP = openDelimiter *> ((In <$ string "let-in") <|> (Plus <$ string "let+")) <* spaces
+      couple = between openDelimiter closeDelimiter ((,) <$> variableGeneric <*> expressionP) 
+      binds = between openDelimiter closeDelimiter (many (spaces *> couple <* spaces))
+  ELet <$> letSortP <*> binds <*> expressionP

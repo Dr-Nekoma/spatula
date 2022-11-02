@@ -6,7 +6,7 @@ import Types
     ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction),
       Kind(..),
       Expression(..),
-      LetKind(..),
+      LetSort(..),
       Literal(LBool, LUnit, LInteger, LRational),
       typeSubstitution,
       TForallInfo(TForallInfo) )
@@ -82,10 +82,15 @@ typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
         else Left $ pack $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show thenType) (show elseType)
     _ -> Left $ pack $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show condType)
 
-typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind body) = do
+typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnType body) = do
   let newKindEnv = Map.insert label kind kindContext
-  bodyType <- typeCheckWithEnvironment (env { kindContext = newKindEnv}) body
-  pure $ TForall $ TForallInfo label kind bodyType
+  resultType <- typeCheckWithEnvironment (env { kindContext = newKindEnv}) body
+  let possibleReturn = pure $ TAbstraction label kind resultType
+  case returnType of
+        Just rt -> if rt == resultType
+                      then possibleReturn
+                      else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+        Nothing -> possibleReturn
 
 -- TODO: We need to do reduction at some point due to the potential type of expr  
 typeCheckWithEnvironment env (ETypeApplication expr type') = do
