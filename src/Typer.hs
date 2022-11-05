@@ -48,23 +48,22 @@ typeCheckWithEnvironment env@TyperEnv{..} (ELet Plus ((label, expr):xs) body) = 
   typedExpression <- typeCheckWithEnvironment env expr
   typeCheckWithEnvironment (env { variableTypes = Map.insert label typedExpression variableTypes}) (ELet Plus xs body)
 
--- Remember to consider that the syntax receives multiples parameters and it does a transformation to curried notation
--- and it has an optional annotated return type
+-- TODO: We should kind check the return type in the type annotation to provide better error messages
 typeCheckWithEnvironment env@TyperEnv{..} (EAbstraction label type' returnType expression) = do
   parameterKind <- kindCheckWithEnvironment env type'
   case parameterKind of 
     StarK -> do 
       let newEnv = env { variableTypes = Map.insert label type' variableTypes }
       resultType <- typeCheckWithEnvironment newEnv expression
-      let expectedReturn = pure $ TArrow type' resultType
       case returnType of
-        Just rt -> if rt == resultType
-                    then expectedReturn
-                    else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
-        Nothing -> expectedReturn
-    other -> Left $ pack $ printf "KIND ERROR: Expected parameter to have kind * but it has %s" (show other)
+        Just rt -> do reducedAnnotatedType <- reduceType newEnv rt
+                      reducedResultType <- reduceType newEnv resultType
+                      if reducedAnnotatedType == reducedResultType
+                      then pure $ TArrow type' rt
+                      else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+        Nothing -> pure $ TArrow type' resultType
+    other -> Left $ pack $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
 
--- TODO: Remember to reduce funType before asking its type
 typeCheckWithEnvironment env (EApplication fun arg) = do
   reducedFunType <- reduceType env =<< typeCheckWithEnvironment env fun
   case reducedFunType of
@@ -72,7 +71,7 @@ typeCheckWithEnvironment env (EApplication fun arg) = do
       reducedArgType <- reduceType env =<< typeCheckWithEnvironment env arg
       if reducedArgType == parameterType
         then pure resultType
-      else Left $ pack $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show reducedArgType) (show parameterType)
+      else Left $ pack $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
     _ -> Left $ pack $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (show reducedFunType)
 
 typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
@@ -87,17 +86,18 @@ typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
         else Left $ pack $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show reducedThenType) (show reducedElseType)
     _ -> Left $ pack $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show reducedCondType)
 
+-- TODO: We should kind check the return type in the type annotation to provide better error messages
 typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnType body) = do
   let newKindEnv = env { kindContext = Map.insert label kind kindContext }
-  reducedResultType <- reduceType newKindEnv =<< typeCheckWithEnvironment newKindEnv body
-  let possibleReturn = pure $ TAbstraction label kind reducedResultType
+  resultType <- typeCheckWithEnvironment newKindEnv body
   case returnType of
-        Just rt -> if rt == reducedResultType
-                      then possibleReturn
-                      else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
-        Nothing -> possibleReturn
+    Just rt -> do reducedAnnotatedType <- reduceType newKindEnv rt
+                  reducedResultType <- reduceType newKindEnv resultType
+                  if reducedAnnotatedType == reducedResultType
+                  then pure $ TForall $ TForallInfo label kind rt
+                  else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show returnType) (show rt)
+    Nothing -> pure $ TForall $ TForallInfo label kind resultType
 
--- TODO: We need to do reduction at some point due to the potential type of expr  
 typeCheckWithEnvironment env (ETypeApplication expr type') = do
   reducedFunctionType <- reduceType env =<< typeCheckWithEnvironment env expr
   case reducedFunctionType of
@@ -105,7 +105,7 @@ typeCheckWithEnvironment env (ETypeApplication expr type') = do
      expectedKind <- kindCheckWithEnvironment env type'
      if kind == expectedKind
        then pure $ typeSubstitution identifier type' bodyType
-       else Left $ pack $ printf "TYPE ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
+       else Left $ pack $ printf "KIND ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
     _ -> Left $ pack $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
 
 typeCheck :: Expression -> Result Type

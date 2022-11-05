@@ -110,7 +110,7 @@ instance Arbitrary LetSort where
 data Expression
     = ELiteral Literal
     | EVariable Text
-    | ELet LetSort [(Text, Expression)] Expression
+    | ELet LetSort [(Text, Expression)] Expression -- What about kind checking this?
     | EAbstraction Text Type (Maybe Type) Expression
     | EApplication Expression Expression
     | ECondition Expression Expression Expression
