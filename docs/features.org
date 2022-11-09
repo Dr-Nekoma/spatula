@@ -2,8 +2,8 @@
 
 * Phase 1 (5 m.) | 30/09/2022 - XX/XX/XXXX 
 ** DONE Silverware 90% backwards compatibility
+** DONE Let bindings
 ** TODO Type Operators
-** TODO Let bindings
 ** TODO Algebraic Data Types
 ** TODO Pattern Matching
 ** TODO Disjunctive pattern matching

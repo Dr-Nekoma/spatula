@@ -15,6 +15,7 @@ import Text.Printf ( printf )
 import Utils ( Result )
 import Data.Traversable
 import qualified Data.Map as Map
+import SWPrelude
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -109,7 +110,7 @@ typeCheckWithEnvironment env (ETypeApplication expr type') = do
     _ -> Left $ pack $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
 
 typeCheck :: Expression -> Result Type
-typeCheck = typeCheckWithEnvironment (TyperEnv Map.empty Map.empty)
+typeCheck = typeCheckWithEnvironment (TyperEnv typerPrelude kinderPrelude)
 
 kindCheckWithEnvironment :: TyperEnv -> Type -> Result Kind
 kindCheckWithEnvironment env@TyperEnv{..} type' =
@@ -127,10 +128,10 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
       case (kindInput, kindOutput) of
         (StarK, StarK) -> pure StarK
         (left, right) -> Left $ pack $ printf "Expression arrow must have kind * -> * and it has %s -> %s." (show left) (show right)
-    TForall (TForallInfo identifier kind identType) -> do
+    TForall (TForallInfo identifier kind bodyType) -> do
        let newEnv = Map.insert identifier kind kindContext
-       kindIdent <- kindCheckWithEnvironment (env {kindContext = newEnv}) identType
-       case kindIdent of
+       kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
+       case kindBody of
         StarK -> pure StarK
         kind' -> Left $ pack $ printf "Foralls should return * but this has %s." (show kind')
     TApplication abstractionType argumentType -> do

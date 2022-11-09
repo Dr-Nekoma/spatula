@@ -7,20 +7,7 @@ import Data.Text ( Text, unpack, pack )
 import Utils ( Result )
 import Text.Printf ( printf )
 import Data.Traversable
-
-data Value
-    = VUnit
-    | VLiteral Literal
-    | VClosure Text Expression EvalEnv
-    | VNativeFunction (Value -> Result Value)
-
-instance Show Value where
-  show VUnit = "()"
-  show (VLiteral literal) = show literal
-  show (VClosure {}) = "<fun>"
-  show (VNativeFunction _) = "<builtin>"
-
-type EvalEnv = Map.Map Text Value
+import SWPrelude
 
 evalWithEnvironment :: EvalEnv -> Expression -> Result Value
 
@@ -76,4 +63,4 @@ evalWithEnvironment env (ETypeApplication expr _) =
   evalWithEnvironment env expr
 
 eval :: Expression -> Result Value
-eval = evalWithEnvironment Map.empty
+eval = evalWithEnvironment evaluatorPrelude
