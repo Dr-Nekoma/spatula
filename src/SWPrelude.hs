@@ -6,9 +6,9 @@ import Types
 import Data.Text
 import qualified Data.Map as Map
 import Data.Text ( Text, unpack, pack )
-import Utils ( Result )
+import Utils ( ResultT )
 import Text.Printf ( printf )
-import System.IO.Unsafe
+import Control.Monad.IO.Class (liftIO)
 
 type EvalEnv = Map.Map Text Value
 
@@ -16,7 +16,7 @@ data Value
     = VUnit
     | VLiteral Literal
     | VClosure Text Expression EvalEnv
-    | VNativeFunction (Value -> Result Value)
+    | VNativeFunction (Value -> ResultT Value)
 
 instance Show Value where
   show VUnit = "()"
@@ -48,14 +48,14 @@ kinderPrelude = Map.fromList list
             ("*", StarK),
             ("show", StarK)]
 
-arithmeticNative :: (Integer -> Integer -> Integer) -> Text -> Value -> Result Value
+arithmeticNative :: (Integer -> Integer -> Integer) -> Text -> Value -> ResultT Value
 arithmeticNative op name (VLiteral literal) = 
     case literal of
-        LInteger first -> Right $ VNativeFunction $ \(VLiteral (LInteger second)) -> Right . VLiteral . LInteger $ op first second
-        _ -> Left "error"
-arithmeticNative _ name _ = Left $ pack $ printf "Can't operate %s on non-numbers" (show $ unpack name)
+        LInteger first -> return $ VNativeFunction $ \(VLiteral (LInteger second)) -> return . VLiteral . LInteger $ op first second
+        _ -> fail "error"
+arithmeticNative _ name _ = fail $ printf "Can't operate %s on non-numbers" (show $ unpack name)
 
-auxiliary :: Value -> Result Value
+auxiliary :: Value -> ResultT Value
 auxiliary value = do
-    let !a = unsafePerformIO (print (show value))
+    liftIO $ print (show value)
     return VUnit

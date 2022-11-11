@@ -6,6 +6,7 @@ import Types
 import Data.Text ( append, pack )
 import Text.Parsec (parseTest, parse)
 import Parser
+import Control.Monad.Trans.Except ( runExceptT )
 
 main :: IO ()
 main = do
@@ -17,6 +18,7 @@ main = do
       print ast
       case typeCheck ast of
         Left errorType -> print $ append (pack "\ESC[91m") errorType
-        Right _ -> case eval ast of
-                    Left errorEvaluator -> print $ append (pack "\ESC[91m") errorEvaluator
-                    Right result -> print result
+        Right _ ->  do evaluated <- runExceptT $ eval ast
+                       case evaluated of
+                        Left errorEvaluator -> print $ append (pack "\ESC[91m") errorEvaluator
+                        Right result -> print result

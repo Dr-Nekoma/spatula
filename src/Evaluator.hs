@@ -4,19 +4,19 @@ module Evaluator ( eval ) where
 import Types ( Expression(..), Literal(LBool), LetSort(..) )
 import qualified Data.Map as Map
 import Data.Text ( Text, unpack, pack )
-import Utils ( Result )
+import Utils ( Result, ResultT )
 import Text.Printf ( printf )
 import Data.Traversable
 import SWPrelude
 
-evalWithEnvironment :: EvalEnv -> Expression -> Result Value
+evalWithEnvironment :: EvalEnv -> Expression -> ResultT Value
 
 evalWithEnvironment _ (ELiteral literal) = pure $ VLiteral literal
 
 evalWithEnvironment env (EVariable label) =
   case Map.lookup label env of
-    Nothing -> Left $ pack $ printf "ERROR: Unbound variable %s in the environment." (unpack label)
-    Just var -> Right var
+    Nothing -> fail $ printf "ERROR: Unbound variable %s in the environment." (unpack label)
+    Just var -> return var
 
 evalWithEnvironment env (EAbstraction label _ _ body) =
   pure $ VClosure label body env
@@ -30,7 +30,7 @@ evalWithEnvironment env (EApplication fun arg) = do
         evalWithEnvironment newEnv body
     VNativeFunction natFun ->
       natFun argValue
-    other -> Left $ pack $ printf "ERROR: Attempted to apply value %s to %s that it is not a function." (show argValue) (show other)
+    other -> fail $ printf "ERROR: Attempted to apply value %s to %s that it is not a function." (show argValue) (show other)
 
 evalWithEnvironment env (ECondition cond thenBranch elseBranch) = do
   test <- evalWithEnvironment env cond
@@ -40,7 +40,7 @@ evalWithEnvironment env (ECondition cond thenBranch elseBranch) = do
         evalWithEnvironment env thenBranch
       else
         evalWithEnvironment env elseBranch
-    cond' -> Left $ pack $ printf "ERROR: The condition %s is not a bool." (show cond')
+    cond' -> fail $ printf "ERROR: The condition %s is not a bool." (show cond')
 
 evalWithEnvironment env (ELet In bindings body) = do
   let (labels, expressions) = unzip bindings
@@ -62,5 +62,5 @@ evalWithEnvironment env (ETypeAbstraction _ _ _ body) =
 evalWithEnvironment env (ETypeApplication expr _) =
   evalWithEnvironment env expr
 
-eval :: Expression -> Result Value
+eval :: Expression -> ResultT Value
 eval = evalWithEnvironment evaluatorPrelude
