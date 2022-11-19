@@ -3,6 +3,12 @@
 
 (forall T. T)
 
+[monoid 0 '+ Integer 
+	[mappend]] => 0
+
+[monoid "A" '^ String
+	[mappend "B" "C"]] => "ABC"
+
 (x: Integer)
 
 'T -> 'T -> Integer
