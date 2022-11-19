@@ -8,6 +8,7 @@ import Types
       Expression(..),
       LetSort(..),
       Literal(LBool, LUnit, LInteger, LRational),
+      Operator(..),
       typeSubstitution,
       TForallInfo(TForallInfo) )
 import Data.Text (pack, Text)
@@ -109,8 +110,35 @@ typeCheckWithEnvironment env (ETypeApplication expr type') = do
        else Left $ pack $ printf "KIND ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
     _ -> Left $ pack $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
 
+typeCheckWithEnvironment env (EOperation OpPlus [x]) = do
+  singleType <- typeCheckWithEnvironment env x
+  case singleType of
+    TInteger -> pure TInteger
+    TRational -> pure TRational
+    others -> Left $ pack $ printf "TYPE ERROR: Operation + does not accept values of type %s" (show others)
+typeCheckWithEnvironment env (EOperation OpMul [x])  = do
+  singleType <- typeCheckWithEnvironment env x
+  case singleType of
+    TInteger -> pure TInteger
+    TRational -> pure TRational
+    others -> Left $ pack $ printf "TYPE ERROR: Operation * does not accept values of type %s" (show others)
+    
+typeCheckWithEnvironment env (EOperation operator []) = Left "TYPE ERROR: Operators don't type check with no elements"
+
+-- TODO: Check properly the arithmetic operators with the exhaustiveness -> THIS IS A TRAP
+typeCheckWithEnvironment env (EOperation operator list) = do
+  operandsTypes <- for list (typeCheckWithEnvironment env)
+  let checkIfAll type' = all (== type')
+  case operator of
+    OpAnd -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: And operators asks for booleans"
+    OpOr  -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: Or operators asks for booleans"
+    others 
+      | checkIfAll TRational operandsTypes -> pure TRational
+      | checkIfAll TInteger operandsTypes  -> pure TInteger
+      | otherwise -> Left $ pack $ printf "TYPE ERROR: Arithmetic operator %s must use Integers or Rationals" (show others)
+      
 typeCheck :: Expression -> Result Type
-typeCheck = typeCheckWithEnvironment (TyperEnv typerPrelude kinderPrelude)
+typeCheck = typeCheckWithEnvironment (TyperEnv typerPrelude Map.empty)
 
 kindCheckWithEnvironment :: TyperEnv -> Type -> Result Kind
 kindCheckWithEnvironment env@TyperEnv{..} type' =

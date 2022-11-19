@@ -2,7 +2,10 @@
 module Parser.Expression (expressionP) where
 
 import Types
-    ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeAbstraction, ETypeApplication, ELet), LetSort(..), Literal(..))
+    ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeAbstraction, ETypeApplication, ELet, EOperation), 
+      LetSort(..), 
+      Literal(..),
+      Operator(..))
 import Parser.Utilities --( ParserT, variableGeneric, typeVariableGeneric )
 import Parser.Literal ( literal )
 import Parser.Types
@@ -29,7 +32,7 @@ exprApplication = do
     _ -> error "This should never happen 💣 | exprApplication and exprETypeApplication"
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprAbstraction, letP]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprAbstraction, letP, operatorP]
 
 openDelimiter :: ParserT st Char
 openDelimiter = char '[' <* spaces
@@ -55,8 +58,14 @@ exprAbstraction = do
   pure $ Prelude.foldr fun first (Prelude.init args)
 
 letP :: ParserT st Expression
-letP =  do
+letP = 
   let letSortP = openDelimiter *> ((In <$ string "let-in") <|> (Plus <$ string "let+")) <* spaces
       couple = between openDelimiter closeDelimiter ((,) <$> variableGeneric <*> expressionP) 
       binds = between openDelimiter closeDelimiter (many (spaces *> couple <* spaces))
-  ELet <$> letSortP <*> binds <*> expressionP
+  in ELet <$> letSortP <*> binds <*> expressionP
+
+operatorP :: ParserT st Expression
+operatorP = 
+  let operators = [minBound .. maxBound] :: [Operator]
+      operatorsP = choice $ fmap try (map (\x -> x <$ string (show x)) operators)
+  in between openDelimiter closeDelimiter (EOperation <$> operatorsP <*> (many1 (spaces *> expressionP) <* spaces))

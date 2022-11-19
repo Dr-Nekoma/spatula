@@ -10,8 +10,8 @@ import Control.Monad.Trans.Except ( runExceptT )
 
 main :: IO ()
 main = do
-  content <- readFile "examples/Show.sw"
-  --content <- readFile "examples/Sum.sw"
+  --content <- readFile "examples/Show.sw"
+  content <- readFile "examples/Sum.sw"
   case parse expressionP "" content of
     Left errorParse -> print $ append (pack "\ESC[91m") (pack $ show errorParse)
     Right ast -> do

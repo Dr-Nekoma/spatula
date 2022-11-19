@@ -14,7 +14,7 @@ import Text.Parsec ( satisfy, many1, parserFail, Parsec, many, between, char, st
 import Data.Set ( Set, fromList, member )
 import Data.Text ( Text, pack )
 import Data.Char ( isAlphaNum, isSymbol )
-import Types ( Curryable(..) )
+import Types ( Curryable(..), Operator(..) )
 
 type ParserT st = Parsec [Char] st
 
@@ -25,14 +25,47 @@ typeVariableGeneric = do
                  then parserFail "Unexpected identifier for type variable name"
                  else return (pack str)
 
+data Delimiter =
+    LeftBracket
+  | RightBracket
+  | LeftParens
+  | RightParens
+  | LeftBraces
+  | RightBraces
+  deriving (Enum, Bounded)
+  
+instance Show Delimiter where
+  show LeftBracket = "["   
+  show RightBracket = "]"   
+  show LeftParens = "("   
+  show RightParens = ")"   
+  show LeftBraces = "{"   
+  show RightBraces = "}"   
+
+data Keyword =
+    Lambda 
+  | If
+  | Forall
+  | Star 
+  deriving (Enum, Bounded)
+
+instance Show Keyword where
+  show Lambda = "lambda"
+  show If = "if"
+  show Forall = "forall"
+  show Star = "Star"
+
 delimiters :: [String]
-delimiters = ["[", "]", "(", ")", "{", "}"]
+delimiters = map show ([minBound .. maxBound] :: [Delimiter])
 
 keyWords :: [String]
-keyWords = ["lambda", "if", "forall", "*"]
+keyWords = map show ([minBound .. maxBound] :: [Keyword])
+
+operators :: [String]
+operators = map show ([minBound .. maxBound] :: [Operator])
 
 invalidVariables :: Set String
-invalidVariables = fromList $ keyWords ++ delimiters
+invalidVariables = fromList $ keyWords ++ delimiters ++ operators
 
 variableGeneric :: ParserT st Text
 variableGeneric = do

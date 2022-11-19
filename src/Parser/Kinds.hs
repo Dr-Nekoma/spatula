@@ -9,7 +9,7 @@ kindP :: ParserT st Kind
 kindP = choice $ fmap try [kindStar, kindArrow]
 
 kindStar :: ParserT st Kind
-kindStar = StarK <$ string "*"
+kindStar = StarK <$ string "Star"
 
 kindArrow :: ParserT st Kind
 kindArrow = arrowP kindP

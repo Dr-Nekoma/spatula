@@ -88,6 +88,9 @@ data Literal
     | LInteger Integer
     | LRational Rational
     | LBool Bool
+    | LString Text
+--    | LList [Expression]
+--    | LTuple [Expression]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Literal where
@@ -104,12 +107,27 @@ instance ToADTArbitrary Literal
 data LetSort = In | Plus
   deriving (Generic, Eq, Show)
 
+data Operator = OpPlus | OpMinus | OpDiv | OpMul | OpAnd | OpOr
+  deriving (Generic, Eq, Enum, Bounded)
+
+instance Show Operator where
+  show OpPlus  = "+"
+  show OpMinus = "-"
+  show OpMul   = "*"
+  show OpDiv   = "/"
+  show OpAnd   = "and"
+  show OpOr    = "or"
+
 instance Arbitrary LetSort where
+  arbitrary = genericArbitrary
+
+instance Arbitrary Operator where
   arbitrary = genericArbitrary
 
 data Expression
     = ELiteral Literal
     | EVariable Text
+    | EOperation Operator [Expression]
     | ELet LetSort [(Text, Expression)] Expression -- What about kind checking this?
     | EAbstraction Text Type (Maybe Type) Expression
     | EApplication Expression Expression
@@ -120,5 +138,3 @@ data Expression
 
 instance Arbitrary Expression where
   arbitrary = genericArbitrary
-
-instance ToADTArbitrary Expression
