@@ -22,6 +22,7 @@
   - Type-Right-Delimiter = ")"  
   - Type-Atom = "Integer" | "Bool" | "Rational" | "Unit"
   - WhiteSpace = " " | "\n" | "\t" | "\r\t" | "\r\n" | "\c"
+  - Operator = "+" | "-" | "*" | "/"
 
 ** General
 
@@ -40,6 +41,7 @@
   - Universal-Abstraction = Abstraction (Parameters (Type | Kind))
   - Variable = Identifier
   - Condition = Enclosed-Expression ("if" WhiteSpace+ Expression WhiteSpace+ Expression WhiteSpace+ Expression)
+  - Operation = Enclosed-Expression (Operator WhiteSpace* Expression+)
 
 ** Type
 
