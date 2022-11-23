@@ -10,7 +10,7 @@ typeP :: ParserT st Type
 typeP = choice $ fmap try [typeLiteral, arrowP typeP, typeForAll, typeVariable]
 
 typeLiteral :: ParserT st Type
-typeLiteral = choice $ fmap try [typeUnit, typeInteger, typeBool, typeRational]
+typeLiteral = choice $ fmap try [typeUnit, typeInteger, typeBool, typeRational, typeString]
 
 typeUnit :: ParserT st Type
 typeUnit = TUnit <$ string "Unit"
@@ -23,6 +23,9 @@ typeBool = TBool <$ string "Bool"
 
 typeRational :: ParserT st Type
 typeRational = TRational <$ string "Rational"
+
+typeString :: ParserT st Type
+typeString = TString <$ string "String"
 
 typeVariable :: ParserT st Type
 typeVariable = TVariable <$> typeVariableGeneric

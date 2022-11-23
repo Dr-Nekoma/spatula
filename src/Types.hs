@@ -1,7 +1,17 @@
 {-# LANGUAGE DeriveGeneric #-}
-module Types where
+module Types ( 
+  typeSubstitution, 
+  Curryable(..), 
+  Kind(..), 
+  Type(..), 
+  TForallInfo(..), 
+  Literal(..),
+  LetSort(..),
+  Operator(..),
+  Expression(..)) where
 
 import Data.Text.Arbitrary ( Text )
+import Data.Text ( unpack )
 import GHC.Generics ( Generic )
 import Test.QuickCheck ( Arbitrary(arbitrary) )
 import Test.QuickCheck.Arbitrary.ADT
@@ -32,6 +42,7 @@ typeSubstitution placeHolder type' target =
     TInteger -> TInteger
     TRational -> TRational
     TBool -> TBool
+    TString -> TString
 
 class Curryable a where  
     kurry :: a -> a -> a
@@ -68,6 +79,7 @@ data Type
     | TInteger
     | TRational
     | TBool
+    | TString
     | TArrow Type Type
     | TVariable Text
     | TForall TForallInfo
@@ -91,23 +103,24 @@ data Literal
     | LString Text
 --    | LList [Expression]
 --    | LTuple [Expression]
-    deriving (Generic, Eq, Show)
+    deriving (Generic, Eq)
 
 instance Arbitrary Literal where
   arbitrary = genericArbitrary
 
 instance ToADTArbitrary Literal
 
--- instance Show Literal where
---   show LUnit = "()"
---   show (LInteger int) = show int
---   show (LRational rational) = show rational
---   show (LBool bool) = show bool
+instance Show Literal where
+  show LUnit = "()"
+  show (LInteger int) = show int
+  show (LRational rational) = show rational
+  show (LBool bool) = show bool
+  show (LString string) = unpack string
 
 data LetSort = In | Plus
   deriving (Generic, Eq, Show)
 
-data Operator = OpPlus | OpMinus | OpDiv | OpMul | OpAnd | OpOr
+data Operator = OpPlus | OpMinus | OpDiv | OpMul | OpAnd | OpOr | OpEqual
   deriving (Generic, Eq, Enum, Bounded)
 
 instance Show Operator where
@@ -117,6 +130,7 @@ instance Show Operator where
   show OpDiv   = "/"
   show OpAnd   = "and"
   show OpOr    = "or"
+  show OpEqual = "="
 
 instance Arbitrary LetSort where
   arbitrary = genericArbitrary

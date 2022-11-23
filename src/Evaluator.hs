@@ -3,8 +3,8 @@ module Evaluator ( eval ) where
 
 import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..) )
 import qualified Data.Map as Map
-import Data.Text ( Text, unpack, pack )
-import Utils ( Result, ResultT )
+import Data.Text ( unpack )
+import Utils ( ResultT )
 import Text.Printf ( printf )
 import Data.Traversable
 import SWPrelude
@@ -28,7 +28,7 @@ evalWithEnvironment env (EApplication fun arg) = do
     VClosure label body closedEnv ->
       let newEnv = Map.insert label argValue closedEnv in
         evalWithEnvironment newEnv body
-    VNativeFunction natFun ->
+    VNativeFunction (NativeFunction natFun) ->
       natFun argValue
     other -> fail $ printf "ERROR: Attempted to apply value %s to %s that it is not a function." (show argValue) (show other)
 
@@ -54,12 +54,8 @@ evalWithEnvironment env (ELet Plus ((label, expr):xs) body) = do
   evaluatedExpression <- evalWithEnvironment env expr
   evalWithEnvironment (Map.insert label evaluatedExpression env) (ELet Plus xs body)
 
-evalWithEnvironment env (EOperation OpPlus [x])  = evalWithEnvironment env x
-evalWithEnvironment env (EOperation OpMul [x])   = evalWithEnvironment env x
-
-evalWithEnvironment env (EOperation OpAnd []) = return $ VLiteral (LBool True)
-evalWithEnvironment env (EOperation OpAnd [x])   = evalWithEnvironment env x
-evalWithEnvironment env (EOperation OpAnd list@(x:xs)) = do
+evalWithEnvironment _ (EOperation OpAnd []) = return $ VLiteral (LBool True)
+evalWithEnvironment env (EOperation OpAnd (x:xs)) = do
   operand <- evalWithEnvironment env x
   case operand of
     VLiteral (LBool False) -> return $ VLiteral (LBool False)
@@ -67,21 +63,27 @@ evalWithEnvironment env (EOperation OpAnd list@(x:xs)) = do
     _ -> fail "This should never happen"
 
 -- TODO: Instead of relying on recursive calls of evalWithEnvironment, let's make an internal function and do the recursion there
-evalWithEnvironment env (EOperation OpOr []) = return $ VLiteral (LBool False)
-evalWithEnvironment env (EOperation OpOr [x])    = evalWithEnvironment env x
-evalWithEnvironment env (EOperation OpOr list@(x:xs)) = do
+evalWithEnvironment _ (EOperation OpOr []) = return $ VLiteral (LBool False)
+evalWithEnvironment env (EOperation OpOr (x:xs)) = do
   operand <- evalWithEnvironment env x
   case operand of
     VLiteral (LBool True) -> return $ VLiteral (LBool False)
     VLiteral (LBool False) -> evalWithEnvironment env (EOperation OpOr xs)
     _ -> fail "This should never happen"
 
-evalWithEnvironment env (EOperation op [x])        = fail $ printf "ERROR: Operator %s does not have a default monoid" (show op)
-evalWithEnvironment env (EOperation operator list) = do
+evalWithEnvironment _ (EOperation OpEqual []) = return $ VLiteral (LBool True)
+evalWithEnvironment env (EOperation OpEqual (x:xs:rest)) = do
+  operand1 <- evalWithEnvironment env x
+  operand2 <- evalWithEnvironment env xs
+  if operand1 == operand2
+  then evalWithEnvironment env (EOperation OpEqual rest)
+  else return $ VLiteral (LBool False)
+
+evalWithEnvironment env (EOperation operator list@(_:_:_)) = do
   (x:xs) <- for list (evalWithEnvironment env)
   return $ foldl (operatorFunction operator) x xs
 
-evalWithEnvironment env (EOperation operator []) = fail $ printf "ERROR: Operator %s does not have an empty monoid" (show operator) 
+evalWithEnvironment _ (EOperation _ _) = fail "Open an issue about this: Operators are broken during evaluation"
 
 evalWithEnvironment env (ETypeAbstraction _ _ _ body) =
   evalWithEnvironment env body

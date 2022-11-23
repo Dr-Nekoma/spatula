@@ -3,14 +3,15 @@
 module Typer ( typeCheck ) where
 
 import Types
-    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction),
+    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString),
       Kind(..),
       Expression(..),
       LetSort(..),
-      Literal(LBool, LUnit, LInteger, LRational),
+      Literal(LBool, LUnit, LInteger, LRational, LString),
       Operator(..),
       typeSubstitution,
       TForallInfo(TForallInfo) )
+import Data.List ( find )
 import Data.Text (pack, Text)
 import Text.Printf ( printf )
 import Utils ( Result )
@@ -31,6 +32,7 @@ typeCheckWithEnvironment _ (ELiteral literal) =
                  LInteger _ -> TInteger
                  LRational _ -> TRational
                  LBool _ -> TBool
+                 LString _ -> TString
   in pure getType
 
 typeCheckWithEnvironment TyperEnv{..} (EVariable label) =
@@ -109,33 +111,26 @@ typeCheckWithEnvironment env (ETypeApplication expr type') = do
        then pure $ typeSubstitution identifier type' bodyType
        else Left $ pack $ printf "KIND ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
     _ -> Left $ pack $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
-
-typeCheckWithEnvironment env (EOperation OpPlus [x]) = do
-  singleType <- typeCheckWithEnvironment env x
-  case singleType of
-    TInteger -> pure TInteger
-    TRational -> pure TRational
-    others -> Left $ pack $ printf "TYPE ERROR: Operation + does not accept values of type %s" (show others)
-typeCheckWithEnvironment env (EOperation OpMul [x])  = do
-  singleType <- typeCheckWithEnvironment env x
-  case singleType of
-    TInteger -> pure TInteger
-    TRational -> pure TRational
-    others -> Left $ pack $ printf "TYPE ERROR: Operation * does not accept values of type %s" (show others)
     
-typeCheckWithEnvironment env (EOperation operator []) = Left "TYPE ERROR: Operators don't type check with no elements"
+typeCheckWithEnvironment _ (EOperation _ []) = Left "TYPE ERROR: Operators don't type check with no elements"
 
 -- TODO: Check properly the arithmetic operators with the exhaustiveness -> THIS IS A TRAP
-typeCheckWithEnvironment env (EOperation operator list) = do
+typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
   operandsTypes <- for list (typeCheckWithEnvironment env)
   let checkIfAll type' = all (== type')
+      x = head operandsTypes
+      xs = tail operandsTypes
   case operator of
-    OpAnd -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: And operators asks for booleans"
-    OpOr  -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: Or operators asks for booleans"
-    others 
+    OpAnd -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: And operator asks for booleans."
+    OpOr  -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: Or operator asks for booleans."
+    OpEqual -> do
+      case find (/= x) xs of
+        Just firstDifferent -> Left $ pack $ printf "TYPE ERROR: Mismatch between elements at an equality comparison. Expected '%s' but got '%s'" (show x) (show firstDifferent)
+        Nothing -> pure x
+    arithmetics -- Arithmetic
       | checkIfAll TRational operandsTypes -> pure TRational
       | checkIfAll TInteger operandsTypes  -> pure TInteger
-      | otherwise -> Left $ pack $ printf "TYPE ERROR: Arithmetic operator %s must use Integers or Rationals" (show others)
+      | otherwise -> Left $ pack $ printf "TYPE ERROR: Arithmetic operator %s must use only numbers of the same sort." (show arithmetics)
       
 typeCheck :: Expression -> Result Type
 typeCheck = typeCheckWithEnvironment (TyperEnv typerPrelude Map.empty)
@@ -147,6 +142,7 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TInteger -> pure StarK
     TRational -> pure StarK
     TBool -> pure StarK
+    TString -> pure StarK
     TVariable label ->
       let kind = Map.lookup label kindContext in
       maybe (Left $ pack $ printf "Unbound type variable %s in the environment." (show label)) Right kind
@@ -182,6 +178,7 @@ reduceType env type' =
     TInteger -> pure TInteger
     TRational -> pure TRational
     TBool -> pure TBool
+    TString -> pure TString
     TArrow parameter returnType -> do
       start <- reduceType env parameter
       target <- reduceType env returnType

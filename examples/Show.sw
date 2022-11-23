@@ -1,1 +1,1 @@
-[show 2]
+[show String "asdfasdfasdfasdf"]

@@ -1,3 +1,4 @@
+{-# LANGUAGE BangPatterns #-}
 module Parser.Utilities
   (
     ParserT

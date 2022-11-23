@@ -2,8 +2,8 @@
 module Parser.Literal ( literal ) where
 
 import Types ( Literal(..) )
-import Parser.Utilities ( ParserT )
-import Text.Parsec ( char, digit, string, many1, (<|>), try, choice )
+import Parser.Utilities ( ParserT, variableGeneric )
+import Text.Parsec ( char, digit, string, many1, (<|>), try, choice, optionMaybe, between )
   
 boolean :: ParserT st Literal
 boolean = LBool <$> (true <|> false)
@@ -11,16 +11,23 @@ boolean = LBool <$> (true <|> false)
          false = False <$ char 'F'
 
 integer :: ParserT st Literal
-integer = LInteger . read <$> many1 digit
+integer = readInteger <$> optionMaybe (string "-") <*> many1 digit
+
+readInteger :: Maybe String -> [Char] -> Literal
+readInteger Nothing = LInteger . read
+readInteger (Just _) = LInteger . negate . read
 
 unit :: ParserT st Literal
 unit = LUnit <$ string "()"
 
+stringP :: ParserT st Literal
+stringP = LString <$> between (char '"') (char '"') variableGeneric
+
 rational :: ParserT st Literal
 rational = do
   numerator <- many1 digit <* char '/'
-  denomintor <- many1 digit
-  return $ LRational . read $ numerator ++ "%" ++ denomintor 
+  denominator <- many1 digit
+  return $ LRational . read $ numerator ++ "%" ++ denominator 
 
 literal :: ParserT st Literal
-literal = choice $ fmap try [unit, rational, integer, boolean]
+literal = choice $ fmap try [unit, rational, integer, boolean, stringP]

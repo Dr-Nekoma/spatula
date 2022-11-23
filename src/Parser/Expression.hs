@@ -21,14 +21,14 @@ exprVariable = EVariable <$> variableGeneric
 
 exprApplication :: ParserT st Expression
 exprApplication = do
-  content <- between openDelimiter closeDelimiter (many1 (spaces *> (fmap Left expressionP <|> fmap Right typeP) <* spaces))
-  let function acc = either (EApplication acc) (ETypeApplication acc)
+  content <- between openDelimiter closeDelimiter (many1 (spaces *> (fmap Left typeP <|> fmap Right expressionP) <* spaces))
+  let function acc = either (ETypeApplication acc) (EApplication acc)
   case content of
     [single] -> case single of
-                  Left expr -> return $ EApplication expr (ELiteral LUnit)
-                  Right _ -> parserFail "Unexpected type for application or type application"
-    ((Right _):_) -> parserFail "Unexpected type for application or type application"
-    ((Left fun):args) -> return $ foldl function fun args
+                  Right expr -> return $ EApplication expr (ELiteral LUnit)
+                  Left _ -> parserFail "Unexpected type for application or type application"
+    ((Left _):_) -> parserFail "Unexpected type for application or type application"
+    ((Right fun):args) -> return $ foldl function fun args
     _ -> error "This should never happen 💣 | exprApplication and exprETypeApplication"
   
 expressionP :: ParserT st Expression
