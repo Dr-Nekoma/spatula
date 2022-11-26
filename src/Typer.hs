@@ -19,7 +19,6 @@ import Utils ( Result )
 import Data.Traversable
 import qualified Data.Map as Map
 import SWPrelude
-import Data.Maybe(isJust)
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -35,7 +34,7 @@ typeCheckWithEnvironment env (EList list) =
     Right (x:_) -> Left $ pack $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
     Left e -> Left e
 
-typeCheckWithEnvironment env (ELiteral literal) =
+typeCheckWithEnvironment _ (ELiteral literal) =
   case literal of
     LUnit -> pure TUnit
     LInteger _ -> pure TInteger
@@ -151,19 +150,19 @@ typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
           Left $ pack $ printf "TYPE ERROR: Expected a List|_| but found '%s'" (show different)
         Nothing ->
           case filter checkIfJust operandsTypes of
-            (x:xs) ->
-              case find (/= x) xs of
+            (y:ys) ->
+              case find (/= y) ys of
                 Just different -> 
-                  Left $ pack $ printf "TYPE ERROR: Attempting to concat lists with distinct types. Received '%s' while expected 's'." (show different) (show x)
-                Nothing -> pure x
+                  Left $ pack $ printf "TYPE ERROR: Attempting to concat lists with distinct types. Received '%s' while expected 's'." (show different) (show y)
+                Nothing -> pure y
             _ -> pure $ TList Nothing
     OpEqual -> do
       case find (/= x) xs of
         Just firstDifferent -> Left $ pack $ printf "TYPE ERROR: Mismatch between elements at an equality comparison. Expected '%s' but got '%s'" (show x) (show firstDifferent)
         Nothing -> pure x
     arithmetics -- Arithmetic
-      | checkIfAll TRational operandsTypes -> pure TRational
-      | checkIfAll TInteger operandsTypes  -> pure TInteger
+      | checkIfAll TRational operandsTypes -> pure $ if operator == OpLessThan then TBool else TRational
+      | checkIfAll TInteger operandsTypes  -> pure $ if operator == OpLessThan then TBool else TInteger
       | otherwise -> Left $ pack $ printf "TYPE ERROR: Arithmetic operator %s must use only numbers of the same sort." (show arithmetics)
       
 typeCheck :: Expression -> Result Type

@@ -44,7 +44,7 @@ exprAbstraction = do
   openDelimiter *> string "lambda" *> spaces
   let argAnd a = (,) <$> (char '(' *> spaces *> variableGeneric <* spaces) <*> (a <* spaces <* char ')' <* spaces)
   args <- openDelimiter *> many (fmap Left (argAnd typeP) <|> fmap Right (argAnd kindP)) <* closeDelimiter
-  (returnType, body) <- (,) <$> (spaces *> optionMaybe (char ':' *> spaces *> typeP <* spaces)) <*> expressionP <* closeDelimiter
+  (returnType, body) <- (,) <$> (spaces *> optionMaybe (spaces *> char ':' *> spaces *> typeP <* spaces)) <*> expressionP <* closeDelimiter
   let fun (Right item) = ($ Nothing) . uncurry ETypeAbstraction $ item
       fun (Left item) = ($ Nothing) . uncurry EAbstraction $ item
       first = case Prelude.last args of

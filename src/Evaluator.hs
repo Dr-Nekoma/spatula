@@ -1,13 +1,36 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Evaluator ( eval ) where
+module Evaluator ( eval, Value(..), NativeFunction(..) ) where
 
 import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..) )
 import qualified Data.Map as Map
-import Data.Text ( unpack )
+import Data.Text ( unpack, Text )
 import Utils ( ResultT )
 import Text.Printf ( printf )
 import Data.Traversable
-import SWPrelude
+
+type EvalEnv = Map.Map Text Value
+
+newtype NativeFunction = NativeFunction (Value -> ResultT Value)
+
+instance Eq NativeFunction where
+    _ == _ = error "You can't compare native functions bro xD"
+
+data Value
+    = VUnit
+    | VLiteral Literal
+    | VClosure Text Expression EvalEnv
+    | VNativeFunction NativeFunction
+    | VList [Value]
+    deriving Eq
+
+instance Show Value where
+  show VUnit = "()"
+  show (VList []) = "'[]"
+  show (VList (x:xs)) = foldl go ("'[" ++ show x) xs ++ "]"
+    where go acc y = acc ++ " " ++ show y
+  show (VLiteral literal) = show literal
+  show (VClosure {}) = "<fun>"
+  show (VNativeFunction _) = "<builtin>"
 
 evalWithEnvironment :: EvalEnv -> Expression -> ResultT Value
 
@@ -71,7 +94,7 @@ evalWithEnvironment _ (EOperation OpOr []) = return $ VLiteral (LBool False)
 evalWithEnvironment env (EOperation OpOr (x:xs)) = do
   operand <- evalWithEnvironment env x
   case operand of
-    VLiteral (LBool True) -> return $ VLiteral (LBool False)
+    VLiteral (LBool True) -> return $ VLiteral (LBool True)
     VLiteral (LBool False) -> evalWithEnvironment env (EOperation OpOr xs)
     _ -> fail "This should never happen"
 
@@ -97,6 +120,8 @@ evalWithEnvironment env (ETypeApplication expr _) =
 
 operatorFunction :: Operator -> Value -> Value -> Value
 operatorFunction OpConcat (VList left) (VList right) = VList $ left ++ right
+operatorFunction OpLessThan (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LBool $ element < acc
+operatorFunction OpLessThan (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LBool $ element < acc
 operatorFunction OpPlus (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element + acc
 operatorFunction OpPlus (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element + acc
 operatorFunction OpMul (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element * acc
@@ -107,5 +132,5 @@ operatorFunction OpMinus (VLiteral (LInteger element)) (VLiteral (LInteger acc))
 operatorFunction OpMinus (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element - acc
 operatorFunction op element acc = error $ printf "Error in fold of %s with element %s and accumulator %s" (show op) (show element) (show acc)
 
-eval :: Expression -> ResultT Value
-eval = evalWithEnvironment evaluatorPrelude
+eval :: EvalEnv -> Expression -> ResultT Value
+eval = evalWithEnvironment

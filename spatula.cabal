@@ -55,6 +55,7 @@ library
     , text
     , transformers
     , vector
+    , haskeline
   default-language: Haskell2010
 
 executable spatula-exe
@@ -80,6 +81,7 @@ executable spatula-exe
     , text
     , transformers
     , vector
+    , haskeline
   default-language: Haskell2010
 
 test-suite spatula-test

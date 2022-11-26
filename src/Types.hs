@@ -144,7 +144,7 @@ instance Show Literal where
 data LetSort = In | Plus
   deriving (Generic, Eq, Show)
 
-data Operator = OpConcat | OpPlus | OpMinus | OpDiv | OpMul | OpAnd | OpOr | OpEqual
+data Operator = OpConcat | OpPlus | OpMinus | OpDiv | OpMul | OpAnd | OpOr | OpEqual | OpLessThan
   deriving (Generic, Eq, Enum, Bounded)
 
 instance Show Operator where
@@ -156,6 +156,7 @@ instance Show Operator where
   show OpOr    = "or"
   show OpEqual = "="
   show OpConcat = "^"
+  show OpLessThan = "<"
 
 instance Arbitrary LetSort where
   arbitrary = genericArbitrary

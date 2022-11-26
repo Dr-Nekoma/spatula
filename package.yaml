@@ -34,6 +34,7 @@ dependencies:
 - QuickCheck
 - quickcheck-arbitrary-adt
 - quickcheck-text
+- haskeline >= 0.8.2 
 
 ghc-options:
 - -Wall
@@ -48,6 +49,8 @@ ghc-options:
 
 library:
   source-dirs: src
+  build-depends:
+  - haskeline
 
 executables:
   spatula-exe:
@@ -59,6 +62,8 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - spatula
+    build-depends:
+    - haskeline
 
 tests:
   spatula-test:
