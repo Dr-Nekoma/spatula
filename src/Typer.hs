@@ -2,8 +2,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Typer ( typeCheck ) where
 
+import Control.Monad
 import Types
-    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString),
+    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString, TList),
       Kind(..),
       Expression(..),
       LetSort(..),
@@ -18,6 +19,7 @@ import Utils ( Result )
 import Data.Traversable
 import qualified Data.Map as Map
 import SWPrelude
+import Data.Maybe(isJust)
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -25,15 +27,21 @@ data TyperEnv = TyperEnv
   } deriving (Eq, Show)
 
 typeCheckWithEnvironment :: TyperEnv -> Expression -> Result Type
+typeCheckWithEnvironment env (EList list) =
+  let allSameType type' = all (== type')
+  in case for list (reduceType env <=< typeCheckWithEnvironment env) of
+    Right [] -> pure $ TList Nothing 
+    Right (x:xs) | allSameType x xs -> pure $ TList (Just x)
+    Right (x:_) -> Left $ pack $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
+    Left e -> Left e
 
-typeCheckWithEnvironment _ (ELiteral literal) =
-  let getType = case literal of
-                 LUnit -> TUnit
-                 LInteger _ -> TInteger
-                 LRational _ -> TRational
-                 LBool _ -> TBool
-                 LString _ -> TString
-  in pure getType
+typeCheckWithEnvironment env (ELiteral literal) =
+  case literal of
+    LUnit -> pure TUnit
+    LInteger _ -> pure TInteger
+    LRational _ -> pure TRational
+    LBool _ -> pure TBool
+    LString _ -> pure TString
 
 typeCheckWithEnvironment TyperEnv{..} (EVariable label) =
   case Map.lookup label variableTypes of
@@ -44,7 +52,7 @@ typeCheckWithEnvironment env@TyperEnv{..} (ELet In bindings body) = do
   let (labels, expressions) = unzip bindings
   typedExpressions <- for expressions (typeCheckWithEnvironment env)
   let newEnv = foldl f variableTypes (zip labels typedExpressions)
-      f acc (label, expression) = Map.insert label expression acc
+      f acc (label, type') = Map.insert label type' acc
   typeCheckWithEnvironment (env {variableTypes = newEnv}) body
 
 typeCheckWithEnvironment env (ELet Plus [] body) = typeCheckWithEnvironment env body
@@ -60,11 +68,14 @@ typeCheckWithEnvironment env@TyperEnv{..} (EAbstraction label type' returnType e
       let newEnv = env { variableTypes = Map.insert label type' variableTypes }
       resultType <- typeCheckWithEnvironment newEnv expression
       case returnType of
-        Just rt -> do reducedAnnotatedType <- reduceType newEnv rt
-                      reducedResultType <- reduceType newEnv resultType
-                      if reducedAnnotatedType == reducedResultType
-                      then pure $ TArrow type' rt
-                      else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+        Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment env rt
+                      case annotatedReturnKind of
+                        StarK -> do reducedAnnotatedType <- reduceType env rt
+                                    reducedResultType <- reduceType env resultType
+                                    if reducedAnnotatedType == reducedResultType
+                                    then pure $ TArrow type' rt
+                                    else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+                        other -> Left $ pack $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
         Nothing -> pure $ TArrow type' resultType
     other -> Left $ pack $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
 
@@ -73,7 +84,8 @@ typeCheckWithEnvironment env (EApplication fun arg) = do
   case reducedFunType of
     TArrow parameterType resultType -> do
       reducedArgType <- reduceType env =<< typeCheckWithEnvironment env arg
-      if reducedArgType == parameterType
+      reducedParameterType <- reduceType env parameterType
+      if reducedArgType == reducedParameterType
         then pure resultType
       else Left $ pack $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
     _ -> Left $ pack $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (show reducedFunType)
@@ -83,23 +95,28 @@ typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
   reducedCondType <- reduceType env condType
   case reducedCondType of
     TBool -> do
-      reducedThenType <- reduceType env =<< typeCheckWithEnvironment env thenBranch
-      reducedElseType <- reduceType env =<< typeCheckWithEnvironment env elseBranch
+      thenBranchType <- typeCheckWithEnvironment env thenBranch
+      elseBranchType <- typeCheckWithEnvironment env elseBranch
+      reducedThenType <- reduceType env thenBranchType
+      reducedElseType <- reduceType env elseBranchType
       if reducedThenType == reducedElseType
-        then pure reducedThenType
-        else Left $ pack $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show reducedThenType) (show reducedElseType)
-    _ -> Left $ pack $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show reducedCondType)
+        then pure thenBranchType
+        else Left $ pack $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show thenBranchType) (show elseBranchType)
+    _ -> Left $ pack $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show condType)
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
 typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnType body) = do
   let newKindEnv = env { kindContext = Map.insert label kind kindContext }
   resultType <- typeCheckWithEnvironment newKindEnv body
   case returnType of
-    Just rt -> do reducedAnnotatedType <- reduceType newKindEnv rt
-                  reducedResultType <- reduceType newKindEnv resultType
-                  if reducedAnnotatedType == reducedResultType
-                  then pure $ TForall $ TForallInfo label kind rt
-                  else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show returnType) (show rt)
+    Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment newKindEnv rt
+                  case annotatedReturnKind of
+                    StarK -> do reducedAnnotatedType <- reduceType newKindEnv rt
+                                reducedResultType <- reduceType newKindEnv resultType
+                                if reducedAnnotatedType == reducedResultType
+                                then pure $ TForall $ TForallInfo label kind rt
+                                else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+                    other -> Left $ pack $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
     Nothing -> pure $ TForall $ TForallInfo label kind resultType
 
 typeCheckWithEnvironment env (ETypeApplication expr type') = do
@@ -116,13 +133,30 @@ typeCheckWithEnvironment _ (EOperation _ []) = Left "TYPE ERROR: Operators don't
 
 -- TODO: Check properly the arithmetic operators with the exhaustiveness -> THIS IS A TRAP
 typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
-  operandsTypes <- for list (typeCheckWithEnvironment env)
+  operandsTypes <- for list (reduceType env <=< typeCheckWithEnvironment env)
   let checkIfAll type' = all (== type')
       x = head operandsTypes
       xs = tail operandsTypes
+      checkIfList (TList _) = True
+      checkIfList _ = False
+      checkIfJust (TList (Just _)) = True
+      checkIfJust _ = False
+
   case operator of
     OpAnd -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: And operator asks for booleans."
     OpOr  -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: Or operator asks for booleans."
+    OpConcat -> 
+      case find (not . checkIfList) operandsTypes of
+        Just different -> 
+          Left $ pack $ printf "TYPE ERROR: Expected a List|_| but found '%s'" (show different)
+        Nothing ->
+          case filter checkIfJust operandsTypes of
+            (x:xs) ->
+              case find (/= x) xs of
+                Just different -> 
+                  Left $ pack $ printf "TYPE ERROR: Attempting to concat lists with distinct types. Received '%s' while expected 's'." (show different) (show x)
+                Nothing -> pure x
+            _ -> pure $ TList Nothing
     OpEqual -> do
       case find (/= x) xs of
         Just firstDifferent -> Left $ pack $ printf "TYPE ERROR: Mismatch between elements at an equality comparison. Expected '%s' but got '%s'" (show x) (show firstDifferent)
@@ -143,6 +177,12 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TRational -> pure StarK
     TBool -> pure StarK
     TString -> pure StarK
+    TList Nothing -> pure StarK
+    TList (Just x) -> do
+      internalKind <- kindCheckWithEnvironment env x
+      case internalKind of
+        StarK -> pure StarK
+        other -> Left $ pack $ printf "Internal types of lists should have kind * and this has %s" (show other)
     TVariable label ->
       let kind = Map.lookup label kindContext in
       maybe (Left $ pack $ printf "Unbound type variable %s in the environment." (show label)) Right kind
@@ -179,6 +219,7 @@ reduceType env type' =
     TRational -> pure TRational
     TBool -> pure TBool
     TString -> pure TString
+    TList elements -> pure $ TList elements
     TArrow parameter returnType -> do
       start <- reduceType env parameter
       target <- reduceType env returnType
@@ -192,18 +233,18 @@ reduceType env type' =
             parameterKind
             tForall)
     TAbstraction parameterName parameterKind body -> do
-        bodyType <- reduceType env body
-        pure $ TAbstraction parameterName parameterKind bodyType
+      bodyType <- reduceType env body
+      pure $ TAbstraction parameterName parameterKind bodyType
     TApplication function_ argument_ -> do
-        function <- reduceType env function_
-        argument <- reduceType env argument_
-        argumentKind <- kindCheckWithEnvironment env argument
-        case function of
-          TAbstraction parameterName parameterKind body ->
-            if argumentKind == parameterKind then
-              pure $ typeSubstitution parameterName argument body
-            else error "TODO TApplication"
-          other -> Left $ pack $ printf "Expected a type abtraction but got %s" (show other)
+      function <- reduceType env function_
+      argument <- reduceType env argument_
+      argumentKind <- kindCheckWithEnvironment env argument
+      case function of
+        TAbstraction parameterName parameterKind body ->
+          if argumentKind == parameterKind then
+            pure $ typeSubstitution parameterName argument body
+          else error "TODO TApplication"
+        other -> Left $ pack $ printf "Expected a type abtraction but got %s" (show other)
 
 
 -- (λx -> (λy -> y) x)

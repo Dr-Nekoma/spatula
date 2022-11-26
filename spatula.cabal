@@ -29,9 +29,9 @@ library
       Parser
       Parser.Expression
       Parser.Kinds
-      Parser.Literal
       Parser.Types
       Parser.Utilities
+      SWPrelude
       Typer
       Types
       Utils

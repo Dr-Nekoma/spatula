@@ -7,7 +7,7 @@ import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP)
 import Text.Parsec
 
 typeP :: ParserT st Type
-typeP = choice $ fmap try [typeLiteral, arrowP typeP, typeForAll, typeVariable]
+typeP = choice $ fmap try [typeLiteral, arrowP typeP, typeForAll, typeList, typeVariable]
 
 typeLiteral :: ParserT st Type
 typeLiteral = choice $ fmap try [typeUnit, typeInteger, typeBool, typeRational, typeString]
@@ -26,6 +26,9 @@ typeRational = TRational <$ string "Rational"
 
 typeString :: ParserT st Type
 typeString = TString <$ string "String"
+
+typeList :: ParserT st Type
+typeList = string "List|" *> (TList . Just <$> typeP) <* char '|'
 
 typeVariable :: ParserT st Type
 typeVariable = TVariable <$> typeVariableGeneric

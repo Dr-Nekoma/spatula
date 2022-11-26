@@ -16,6 +16,7 @@ import GHC.Generics ( Generic )
 import Test.QuickCheck ( Arbitrary(arbitrary) )
 import Test.QuickCheck.Arbitrary.ADT
     ( ToADTArbitrary, genericArbitrary )
+import Text.Printf ( printf )
 
 typeSubstitution :: Text -> Type -> Type -> Type
 typeSubstitution placeHolder type' target =
@@ -43,6 +44,8 @@ typeSubstitution placeHolder type' target =
     TRational -> TRational
     TBool -> TBool
     TString -> TString
+    TList list -> TList $ fmap (typeSubstitution placeHolder type') list
+      
 
 class Curryable a where  
     kurry :: a -> a -> a
@@ -50,7 +53,11 @@ class Curryable a where
 data Kind =
     StarK
   | ArrowK Kind Kind
-  deriving (Eq, Generic, Show)
+  deriving (Eq, Generic)
+
+instance Show Kind where
+  show StarK = "*"
+  show (ArrowK kind1 kind2) = show kind1 ++ " -> " ++ show kind2
 
 instance Curryable Kind where
   kurry = ArrowK
@@ -59,7 +66,10 @@ instance Arbitrary Kind where
   arbitrary = genericArbitrary
 
 data TForallInfo = TForallInfo Text Kind Type
-  deriving (Generic, Show)
+  deriving (Generic)
+
+instance Show TForallInfo where
+  show (TForallInfo label kind type') = printf "%s. %s; %s" (unpack label) (show kind) (show type')
 
 instance Arbitrary TForallInfo where
   arbitrary = genericArbitrary
@@ -80,12 +90,27 @@ data Type
     | TRational
     | TBool
     | TString
+    | TList (Maybe Type)
     | TArrow Type Type
     | TVariable Text
     | TForall TForallInfo
     | TApplication Type Type
     | TAbstraction Text Kind Type
-    deriving (Generic, Eq, Show)
+    deriving (Generic, Eq)
+
+instance Show Type where
+  show TUnit = "Unit"
+  show TInteger = "Integer"
+  show TRational = "Rational"
+  show TBool = "Bool"
+  show TString = "String"
+  show (TList (Just type')) = printf "List|%s|" (show type')
+  show (TList Nothing) = "List|_|"
+  show (TArrow source target) = printf "%s -> %s" (show source) (show target)
+  show (TVariable label) = unpack label
+  show (TForall info) = "forall " ++ show info
+  show (TApplication fun arg) = printf "%s %s" (show fun) (show arg)
+  show (TAbstraction label kind type') = printf "lambda %s : %s -> %s" (unpack label) (show kind) (show type')
 
 instance Curryable Type where
   kurry = TArrow
@@ -101,7 +126,6 @@ data Literal
     | LRational Rational
     | LBool Bool
     | LString Text
---    | LList [Expression]
 --    | LTuple [Expression]
     deriving (Generic, Eq)
 
@@ -120,7 +144,7 @@ instance Show Literal where
 data LetSort = In | Plus
   deriving (Generic, Eq, Show)
 
-data Operator = OpPlus | OpMinus | OpDiv | OpMul | OpAnd | OpOr | OpEqual
+data Operator = OpConcat | OpPlus | OpMinus | OpDiv | OpMul | OpAnd | OpOr | OpEqual
   deriving (Generic, Eq, Enum, Bounded)
 
 instance Show Operator where
@@ -131,6 +155,7 @@ instance Show Operator where
   show OpAnd   = "and"
   show OpOr    = "or"
   show OpEqual = "="
+  show OpConcat = "^"
 
 instance Arbitrary LetSort where
   arbitrary = genericArbitrary
@@ -148,6 +173,7 @@ data Expression
     | ECondition Expression Expression Expression
     | ETypeAbstraction Text Kind (Maybe Type) Expression
     | ETypeApplication Expression Type
+    | EList [Expression]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Expression where

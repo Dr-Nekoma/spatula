@@ -41,7 +41,8 @@
 (eval-and-compile
   (defconst silverware-keywords
     '("if" "match" "defun" "do" "open" "defalgebraic" "defmacro" "lambda" "and" "or"
-      "+" "-" "*" "/" "=:=" ">" "<" ">=" "<=" "not"
+      "Unit" "Integer" "Rational" "String" "Bool" "let-in" "let+" "forall"
+      "+" "-" "*" "/" "="
       "defrecord" "begin" "call" "->" "rec" "list" "quote" "#" "@" "!")))
 
 (defconst silverware-highlights

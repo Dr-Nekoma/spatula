@@ -20,20 +20,38 @@ data Value
     | VLiteral Literal
     | VClosure Text Expression EvalEnv
     | VNativeFunction NativeFunction
+    | VList [Value]
     deriving Eq
 
 instance Show Value where
   show VUnit = "()"
+  show (VList list) = show list
   show (VLiteral literal) = show literal
   show (VClosure {}) = "<fun>"
   show (VNativeFunction _) = "<builtin>"
 
 evaluatorPrelude :: Map.Map Text Value
-evaluatorPrelude = Map.fromList [("show", VNativeFunction $ NativeFunction ourPrint)]
+evaluatorPrelude = Map.fromList [("print", VNativeFunction $ NativeFunction ourPrint),
+                                 ("car", VNativeFunction $ NativeFunction car),
+                                 ("cdr", VNativeFunction $ NativeFunction cdr)]
 
 typerPrelude :: Map.Map Text Type
 typerPrelude = Map.fromList list
-    where list = [("show", TForall $ TForallInfo "T" StarK (TArrow (TVariable "T") TUnit))]
+    where list = [("print", TForall $ TForallInfo "T" StarK (TArrow (TVariable "T") TUnit)),
+                  ("car", TForall $ TForallInfo "T" StarK (TArrow (TList . Just $ TVariable "T") (TVariable "T"))),
+                  ("cdr", TForall $ TForallInfo "T" StarK (TArrow (TList . Just $ TVariable "T") (TList . Just $ TVariable "T")))]
+
+car :: Value -> ResultT Value
+car (VList []) = fail "Can't apply 'car' function in empty lists"
+car (VList list) = return . head $ list
+car _ = fail "Function 'car' can only be applied to lists"
+
+cdr :: Value -> ResultT Value
+cdr (VList []) = fail "Can't apply 'cdr' to an empty list"
+cdr (VList list) = return . VList . tail $ list
+cdr _ = fail "Function 'car' can only be applied to lists"
+
+
 
 ourPrint :: Value -> ResultT Value
 ourPrint value = do

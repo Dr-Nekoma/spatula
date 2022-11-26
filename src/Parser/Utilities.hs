@@ -8,6 +8,8 @@ module Parser.Utilities
   , invalidVariables
   , arrowP
   , listP
+  , openDelimiter
+  , closeDelimiter
   )
 where
  
@@ -25,6 +27,12 @@ typeVariableGeneric = do
                  if member str invalidVariables
                  then parserFail "Unexpected identifier for type variable name"
                  else return (pack str)
+
+openDelimiter :: ParserT st Char
+openDelimiter = char '[' <* spaces
+
+closeDelimiter :: ParserT st Char
+closeDelimiter = spaces *> char ']' 
 
 data Delimiter =
     LeftBracket
@@ -48,6 +56,8 @@ data Keyword =
   | If
   | Forall
   | Star 
+  | LetIn
+  | LetPlus
   deriving (Enum, Bounded)
 
 instance Show Keyword where
@@ -55,6 +65,8 @@ instance Show Keyword where
   show If = "if"
   show Forall = "forall"
   show Star = "Star"
+  show LetIn = "let-in"
+  show LetPlus = "let+"
 
 delimiters :: [String]
 delimiters = map show ([minBound .. maxBound] :: [Delimiter])

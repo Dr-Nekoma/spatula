@@ -11,6 +11,10 @@ import SWPrelude
 
 evalWithEnvironment :: EvalEnv -> Expression -> ResultT Value
 
+evalWithEnvironment env (EList list) = do
+  evaluatedElems <- for list (evalWithEnvironment env)
+  pure $ VList evaluatedElems
+
 evalWithEnvironment _ (ELiteral literal) = pure $ VLiteral literal
 
 evalWithEnvironment env (EVariable label) =
@@ -92,6 +96,7 @@ evalWithEnvironment env (ETypeApplication expr _) =
   evalWithEnvironment env expr
 
 operatorFunction :: Operator -> Value -> Value -> Value
+operatorFunction OpConcat (VList left) (VList right) = VList $ left ++ right
 operatorFunction OpPlus (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element + acc
 operatorFunction OpPlus (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element + acc
 operatorFunction OpMul (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element * acc
