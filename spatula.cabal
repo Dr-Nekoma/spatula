@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.35.0.
+-- This file has been generated from package.yaml by hpack version 0.34.7.
 --
 -- see: https://github.com/sol/hpack
 
@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      CL
       Evaluator
       Parser
       Parser.Expression
@@ -46,6 +47,7 @@ library
     , bytestring
     , containers
     , envparse
+    , haskeline >=0.8.2
     , hspec
     , optparse-applicative
     , parsec
@@ -55,7 +57,6 @@ library
     , text
     , transformers
     , vector
-    , haskeline
   default-language: Haskell2010
 
 executable spatula-exe
@@ -71,6 +72,7 @@ executable spatula-exe
     , bytestring
     , containers
     , envparse
+    , haskeline >=0.8.2
     , hspec
     , optparse-applicative
     , parsec
@@ -81,7 +83,6 @@ executable spatula-exe
     , text
     , transformers
     , vector
-    , haskeline
   default-language: Haskell2010
 
 test-suite spatula-test
@@ -99,6 +100,7 @@ test-suite spatula-test
     , bytestring
     , containers
     , envparse
+    , haskeline >=0.8.2
     , hspec
     , optparse-applicative
     , parsec

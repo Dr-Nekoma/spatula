@@ -49,8 +49,6 @@ ghc-options:
 
 library:
   source-dirs: src
-  build-depends:
-  - haskeline
 
 executables:
   spatula-exe:
@@ -62,8 +60,6 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - spatula
-    build-depends:
-    - haskeline
 
 tests:
   spatula-test:
