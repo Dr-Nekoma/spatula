@@ -4,10 +4,10 @@ in
 pkgs.mkShell {
   buildInputs = with pkgs; [
     stack
-    haskell.compiler.ghc8107
-    haskell.packages.ghc8107.cabal-install
-    haskell.packages.ghc8107.haskell-language-server
-    haskell.packages.ghc8107.hlint
+    haskell.compiler.ghc902
+    haskell.packages.ghc902.cabal-install
+    haskell.packages.ghc902.haskell-language-server
+    haskell.packages.ghc902.hlint
   ];
   shellHook = ''
   '';
