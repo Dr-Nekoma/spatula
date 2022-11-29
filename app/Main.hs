@@ -14,7 +14,7 @@ import SWPrelude
 import System.IO ( hFlush, stdout )
 import System.Console.Haskeline
 import Control.Monad.IO.Class
-import Control.Monad ( when, unless )
+import Control.Monad ( when )
 
 fullExecution :: String -> IO ()
 fullExecution content = do
@@ -64,10 +64,12 @@ main = do
         then fail "Silverware+ file does not terminate with .sw"
         else do
           content <- readFile f
-          unless (justParse || justTypeCheck || justEvaluate) (fullExecution content)
-          when justParse (either (const $ pure ()) (\x -> printMessage $ (Right x :: Either ParseError Expression)) (parse expressionP "" content))
-          case parse expressionP "" content of
-            Left errorParse -> printMessage (Left errorParse :: Either ParseError Expression)
-            Right ast -> do
-              when justTypeCheck (printMessage (typeCheck ast))
-              when justEvaluate (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (eval evaluatorPrelude ast) >>= printMessage)
+          if not (justParse || justTypeCheck || justEvaluate) then fullExecution content
+          else do
+            let parsed = parse expressionP "" content
+            when justParse (either (const $ pure ()) (\x -> printMessage $ (Right x :: Either ParseError Expression)) parsed)
+            case parsed of
+              Left errorParse -> printMessage (Left errorParse :: Either ParseError Expression)
+              Right ast -> do
+                when justTypeCheck (printMessage (typeCheck ast))
+                when justEvaluate (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (eval evaluatorPrelude ast) >>= printMessage)
