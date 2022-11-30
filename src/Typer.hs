@@ -2,16 +2,16 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Typer ( typeCheck ) where
 
-import Control.Monad
 import Types
     ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString, TList),
+      TListInfo(..),
       Kind(..),
       Expression(..),
       LetSort(..),
       Literal(LBool, LUnit, LInteger, LRational, LString),
       Operator(..),
       typeSubstitution,
-      TForallInfo(TForallInfo) )
+      AbstractionInfo(AbstractionInfo) )
 import Data.List ( find )
 import Data.Text (pack, Text)
 import Text.Printf ( printf )
@@ -28,9 +28,9 @@ data TyperEnv = TyperEnv
 typeCheckWithEnvironment :: TyperEnv -> Expression -> Result Type
 typeCheckWithEnvironment env (EList list) =
   let allSameType type' = all (== type')
-  in case for list (reduceType env <=< typeCheckWithEnvironment env) of
-    Right [] -> pure $ TList Nothing 
-    Right (x:xs) | allSameType x xs -> pure $ TList (Just x)
+  in case for list (fmap reduceType . typeCheckWithEnvironment env) of
+    Right [] -> pure $ (TList . TListInfo) Nothing 
+    Right (x:xs) | allSameType x xs -> pure $ (TList . TListInfo) (Just x)
     Right (x:_) -> Left $ pack $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
     Left e -> Left e
 
@@ -69,8 +69,8 @@ typeCheckWithEnvironment env@TyperEnv{..} (EAbstraction label type' returnType e
       case returnType of
         Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment env rt
                       case annotatedReturnKind of
-                        StarK -> do reducedAnnotatedType <- reduceType env rt
-                                    reducedResultType <- reduceType env resultType
+                        StarK -> do let reducedAnnotatedType = reduceType rt
+                                        reducedResultType = reduceType resultType
                                     if reducedAnnotatedType == reducedResultType
                                     then pure $ TArrow type' rt
                                     else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
@@ -79,11 +79,11 @@ typeCheckWithEnvironment env@TyperEnv{..} (EAbstraction label type' returnType e
     other -> Left $ pack $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
 
 typeCheckWithEnvironment env (EApplication fun arg) = do
-  reducedFunType <- reduceType env =<< typeCheckWithEnvironment env fun
+  reducedFunType <- reduceType <$> typeCheckWithEnvironment env fun
   case reducedFunType of
     TArrow parameterType resultType -> do
-      reducedArgType <- reduceType env =<< typeCheckWithEnvironment env arg
-      reducedParameterType <- reduceType env parameterType
+      reducedArgType <- reduceType <$> typeCheckWithEnvironment env arg
+      let reducedParameterType = reduceType parameterType
       if reducedArgType == reducedParameterType
         then pure resultType
       else Left $ pack $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
@@ -91,13 +91,13 @@ typeCheckWithEnvironment env (EApplication fun arg) = do
 
 typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
   condType <- typeCheckWithEnvironment env cond
-  reducedCondType <- reduceType env condType
+  let reducedCondType = reduceType condType
   case reducedCondType of
     TBool -> do
       thenBranchType <- typeCheckWithEnvironment env thenBranch
       elseBranchType <- typeCheckWithEnvironment env elseBranch
-      reducedThenType <- reduceType env thenBranchType
-      reducedElseType <- reduceType env elseBranchType
+      let reducedThenType = reduceType thenBranchType
+          reducedElseType = reduceType elseBranchType
       if reducedThenType == reducedElseType
         then pure thenBranchType
         else Left $ pack $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show thenBranchType) (show elseBranchType)
@@ -110,18 +110,18 @@ typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnTyp
   case returnType of
     Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment newKindEnv rt
                   case annotatedReturnKind of
-                    StarK -> do reducedAnnotatedType <- reduceType newKindEnv rt
-                                reducedResultType <- reduceType newKindEnv resultType
+                    StarK -> do let reducedAnnotatedType = reduceType rt
+                                    reducedResultType = reduceType resultType
                                 if reducedAnnotatedType == reducedResultType
-                                then pure $ TForall $ TForallInfo label kind rt
+                                then pure $ TForall $ AbstractionInfo label kind rt
                                 else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
                     other -> Left $ pack $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
-    Nothing -> pure $ TForall $ TForallInfo label kind resultType
+    Nothing -> pure $ TForall $ AbstractionInfo label kind resultType
 
 typeCheckWithEnvironment env (ETypeApplication expr type') = do
-  reducedFunctionType <- reduceType env =<< typeCheckWithEnvironment env expr
+  reducedFunctionType <- reduceType <$> typeCheckWithEnvironment env expr
   case reducedFunctionType of
-    TForall (TForallInfo identifier kind bodyType) -> do
+    TForall (AbstractionInfo identifier kind bodyType) -> do
      expectedKind <- kindCheckWithEnvironment env type'
      if kind == expectedKind
        then pure $ typeSubstitution identifier type' bodyType
@@ -132,13 +132,13 @@ typeCheckWithEnvironment _ (EOperation _ []) = Left "TYPE ERROR: Operators don't
 
 -- TODO: Check properly the arithmetic operators with the exhaustiveness -> THIS IS A TRAP
 typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
-  operandsTypes <- for list (reduceType env <=< typeCheckWithEnvironment env)
+  operandsTypes <- for list (fmap reduceType . typeCheckWithEnvironment env)
   let checkIfAll type' = all (== type')
       x = head operandsTypes
       xs = tail operandsTypes
       checkIfList (TList _) = True
       checkIfList _ = False
-      checkIfJust (TList (Just _)) = True
+      checkIfJust (TList (TListInfo (Just _))) = True
       checkIfJust _ = False
 
   case operator of
@@ -155,7 +155,7 @@ typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
                 Just different -> 
                   Left $ pack $ printf "TYPE ERROR: Attempting to concat lists with distinct types. Received '%s' while expected 's'." (show different) (show y)
                 Nothing -> pure y
-            _ -> pure $ TList Nothing
+            _ -> pure $ (TList . TListInfo) Nothing
     OpEqual -> do
       case find (/= x) xs of
         Just firstDifferent -> Left $ pack $ printf "TYPE ERROR: Mismatch between elements at an equality comparison. Expected '%s' but got '%s'" (show x) (show firstDifferent)
@@ -176,8 +176,8 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TRational -> pure StarK
     TBool -> pure StarK
     TString -> pure StarK
-    TList Nothing -> pure StarK
-    TList (Just x) -> do
+    TList (TListInfo Nothing) -> pure StarK
+    TList (TListInfo (Just x)) -> do
       internalKind <- kindCheckWithEnvironment env x
       case internalKind of
         StarK -> pure StarK
@@ -191,7 +191,7 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
       case (kindInput, kindOutput) of
         (StarK, StarK) -> pure StarK
         (left, right) -> Left $ pack $ printf "Expression arrow must have kind * -> * and it has %s -> %s." (show left) (show right)
-    TForall (TForallInfo identifier kind bodyType) -> do
+    TForall (AbstractionInfo identifier kind bodyType) -> do
        let newEnv = Map.insert identifier kind kindContext
        kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
        case kindBody of
@@ -205,45 +205,35 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
                           then pure k2
                           else Left $ pack $ printf "Kind argument %s does not match expected kind %s." (show kindArg) (show k1) 
         kind' -> Left $ pack $ printf "Type abstraction of kind %s is not a arrow kind" (show kind')
-    TAbstraction label kind bodyType -> do
+    TAbstraction (AbstractionInfo label kind bodyType) -> do
       let newEnv = Map.insert label kind kindContext
       kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
       pure $ ArrowK kind kindBody      
 
-reduceType :: TyperEnv -> Type -> Either Text Type
-reduceType env type' = 
+reduceType :: Type -> Type
+reduceType type' = 
   case type' of
-    TUnit -> pure TUnit
-    TInteger -> pure TInteger
-    TRational -> pure TRational
-    TBool -> pure TBool
-    TString -> pure TString
-    TList elements -> pure $ TList elements
-    TArrow parameter returnType -> do
-      start <- reduceType env parameter
-      target <- reduceType env returnType
-      pure $ TArrow start target
-    TVariable ident -> pure $ TVariable ident
-    TForall (TForallInfo parameterName parameterKind bodyType) -> do
-      tForall <- reduceType env bodyType
-      pure $ TForall
-          (TForallInfo
+    TUnit -> TUnit
+    TInteger -> TInteger
+    TRational -> TRational
+    TBool -> TBool
+    TString -> TString
+    TList (TListInfo type'') -> TList . TListInfo $ fmap reduceType type''
+    TArrow parameter returnType -> TArrow (reduceType parameter) (reduceType returnType)
+    TVariable ident -> TVariable ident
+    TForall (AbstractionInfo parameterName parameterKind bodyType) ->
+      let tForall = reduceType bodyType
+      in TForall
+          (AbstractionInfo
             parameterName
             parameterKind
             tForall)
-    TAbstraction parameterName parameterKind body -> do
-      bodyType <- reduceType env body
-      pure $ TAbstraction parameterName parameterKind bodyType
-    TApplication function_ argument_ -> do
-      function <- reduceType env function_
-      argument <- reduceType env argument_
-      argumentKind <- kindCheckWithEnvironment env argument
+    TAbstraction (AbstractionInfo parameterName parameterKind body) -> 
+      TAbstraction (AbstractionInfo parameterName parameterKind (reduceType body))
+    TApplication function_ argument_ -> 
+      let function = reduceType function_
+          argument = reduceType argument_
+      in    
       case function of
-        TAbstraction parameterName parameterKind body ->
-          if argumentKind == parameterKind then
-            pure $ typeSubstitution parameterName argument body
-          else error "TODO TApplication"
-        other -> Left $ pack $ printf "Expected a type abtraction but got %s" (show other)
-
-
--- (λx -> (λy -> y) x)
+        TAbstraction (AbstractionInfo parameterName _ body) -> reduceType $ typeSubstitution parameterName argument body
+        _ -> TApplication function argument

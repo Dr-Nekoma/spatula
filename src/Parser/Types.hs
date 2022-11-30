@@ -28,7 +28,7 @@ typeString :: ParserT st Type
 typeString = TString <$ string "String"
 
 typeList :: ParserT st Type
-typeList = string "List|" *> (TList . Just <$> typeP) <* char '|'
+typeList = string "List|" *> (TList . TListInfo . Just <$> typeP) <* char '|'
 
 typeVariable :: ParserT st Type
 typeVariable = TVariable <$> typeVariableGeneric
@@ -37,6 +37,6 @@ typeVariable = TVariable <$> typeVariableGeneric
 
 typeForAll :: ParserT st Type
 typeForAll = do
-  something <- between (string "forall" *> spaces) (spaces *> char ';') (TForallInfo <$> (typeVariableGeneric <* spaces <* char '.' <* spaces) <*> kindP)
+  something <- between (string "forall" *> spaces) (spaces *> char ';') (AbstractionInfo <$> (typeVariableGeneric <* spaces <* char '.' <* spaces) <*> kindP)
   between (char '(' *> spaces) (spaces *> char ')') (TForall . something <$> typeP)
 

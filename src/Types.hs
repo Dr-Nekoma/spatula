@@ -4,7 +4,8 @@ module Types (
   Curryable(..), 
   Kind(..), 
   Type(..), 
-  TForallInfo(..), 
+  AbstractionInfo(..), 
+  TListInfo(..),
   Literal(..),
   LetSort(..),
   Operator(..),
@@ -18,6 +19,15 @@ import Test.QuickCheck.Arbitrary.ADT
     ( ToADTArbitrary, genericArbitrary )
 import Text.Printf ( printf )
 
+refresh :: Text -> Text
+refresh = id
+
+abstractionSubstitution :: Text -> Type -> AbstractionInfo -> AbstractionInfo
+abstractionSubstitution from to abstraction@(AbstractionInfo label kind type') = 
+  if label == from then abstraction else AbstractionInfo newLabel kind (typeSubstitution from to newBody)
+  where newLabel = refresh label
+        newBody = typeSubstitution label (TVariable newLabel) type'
+
 typeSubstitution :: Text -> Type -> Type -> Type
 typeSubstitution placeHolder type' target =
   case target of
@@ -29,14 +39,8 @@ typeSubstitution placeHolder type' target =
       TApplication
         (typeSubstitution placeHolder type' abstractionType)
         (typeSubstitution placeHolder type' argumentType)
-    typeAbstraction@(TAbstraction label kind type'')
-      | label == placeHolder ->
-          typeAbstraction
-      | otherwise ->
-          TAbstraction label kind (typeSubstitution placeHolder type' type'')
-    TForall info@(TForallInfo identifier kind type'')
-      | identifier == placeHolder -> TForall info
-      | otherwise -> TForall (TForallInfo identifier kind (typeSubstitution placeHolder type' type''))
+    TAbstraction info -> TAbstraction (abstractionSubstitution placeHolder type' info)
+    TForall info -> TForall (abstractionSubstitution placeHolder type' info) 
     TVariable identifier | identifier == placeHolder -> type'
                          | otherwise -> TVariable identifier
     TUnit -> TUnit
@@ -44,9 +48,8 @@ typeSubstitution placeHolder type' target =
     TRational -> TRational
     TBool -> TBool
     TString -> TString
-    TList list -> TList $ fmap (typeSubstitution placeHolder type') list
+    TList (TListInfo listType) -> TList . TListInfo $ fmap (typeSubstitution placeHolder type') listType
       
-
 class Curryable a where  
     kurry :: a -> a -> a
 
@@ -65,24 +68,38 @@ instance Curryable Kind where
 instance Arbitrary Kind where
   arbitrary = genericArbitrary
 
-data TForallInfo = TForallInfo Text Kind Type
+data AbstractionInfo = AbstractionInfo Text Kind Type
   deriving (Generic)
 
-instance Show TForallInfo where
-  show (TForallInfo label kind type') = printf "%s. %s; %s" (unpack label) (show kind) (show type')
+instance Show AbstractionInfo where
+  show (AbstractionInfo label kind type') = printf "%s. %s; %s" (unpack label) (show kind) (show type')
 
-instance Arbitrary TForallInfo where
+instance Arbitrary AbstractionInfo where
   arbitrary = genericArbitrary
 
-instance ToADTArbitrary TForallInfo
+instance ToADTArbitrary AbstractionInfo
 
-instance Eq TForallInfo where
-  (TForallInfo ident1 kind1 type1) == (TForallInfo ident2 kind2 type2) =
+instance Eq AbstractionInfo where
+  (AbstractionInfo ident1 kind1 type1) == (AbstractionInfo ident2 kind2 type2) =
     if kind1 == kind2 then
       if ident1 == ident2
       then type1 == type2
-      else type1 == typeSubstitution ident2 (TVariable ident1) type2
+      else let newLabel = refresh ident1 
+           in typeSubstitution ident1 (TVariable newLabel) type1 == typeSubstitution ident2 (TVariable newLabel) type2
     else False
+
+data TListInfo = TListInfo (Maybe Type)
+  deriving (Generic)
+
+instance Arbitrary TListInfo where
+  arbitrary = genericArbitrary
+
+instance ToADTArbitrary TListInfo
+
+instance Eq TListInfo where
+  (TListInfo Nothing) == _ = True
+  _ == (TListInfo Nothing) = True
+  (TListInfo (Just x)) == (TListInfo (Just y)) = x == y
 
 data Type
     = TUnit
@@ -90,12 +107,12 @@ data Type
     | TRational
     | TBool
     | TString
-    | TList (Maybe Type)
+    | TList TListInfo
     | TArrow Type Type
     | TVariable Text
-    | TForall TForallInfo
+    | TForall AbstractionInfo
     | TApplication Type Type
-    | TAbstraction Text Kind Type
+    | TAbstraction AbstractionInfo
     deriving (Generic, Eq)
 
 instance Show Type where
@@ -104,13 +121,13 @@ instance Show Type where
   show TRational = "Rational"
   show TBool = "Bool"
   show TString = "String"
-  show (TList (Just type')) = printf "List|%s|" (show type')
-  show (TList Nothing) = "List|_|"
+  show (TList (TListInfo (Just type'))) = printf "List|%s|" (show type')
+  show (TList (TListInfo Nothing)) = "List|_|"
   show (TArrow source target) = printf "%s -> %s" (show source) (show target)
   show (TVariable label) = unpack label
   show (TForall info) = "forall " ++ show info
   show (TApplication fun arg) = printf "%s %s" (show fun) (show arg)
-  show (TAbstraction label kind type') = printf "lambda %s : %s -> %s" (unpack label) (show kind) (show type')
+  show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack label) (show kind) (show type')
 
 instance Curryable Type where
   kurry = TArrow

@@ -23,11 +23,11 @@ typeCheckingTest = do
       it "forall a. (x:a) -> x" $ do
         typeCheck identity
           `shouldBe`
-          Right (TForall (TForallInfo "type" (TArrow (TVariable "type") (TVariable "type"))))
+          Right (TForall (AbstractionInfo "type" (TArrow (TVariable "type") (TVariable "type"))))
       it "forall a. (a:a) -> (a:a)" $ do
         typeCheck (ETypeAbstraction "type" (EAbstraction "type" (TVariable "type") Nothing (EVariable "type")))
           `shouldBe`
-          Right (TForall (TForallInfo "type" (TArrow (TVariable "type") (TVariable "type"))))
+          Right (TForall (AbstractionInfo "type" (TArrow (TVariable "type") (TVariable "type"))))
       it "forall a. a -> a $ Integer " $ do
         typeCheck (ETypeApplication identity TInteger)
           `shouldBe`
@@ -37,5 +37,5 @@ typeCheckingTest = do
           `shouldBe`
           Right TInteger
       it "forall a. b. (a -> b) -> a -> b" $ do
-        let type' = TForall (TForallInfo "typeA" (TForall (TForallInfo "typeB" (TArrow (TArrow (TVariable "typeA") (TVariable "typeB")) (TArrow (TVariable "typeA") (TVariable "typeB"))))))
+        let type' = TForall (AbstractionInfo "typeA" (TForall (AbstractionInfo "typeB" (TArrow (TArrow (TVariable "typeA") (TVariable "typeB")) (TArrow (TVariable "typeA") (TVariable "typeB"))))))
         typeCheck abst `shouldBe` Right type'
