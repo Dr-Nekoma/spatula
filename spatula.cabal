@@ -53,6 +53,7 @@ library
     , parsec
     , quickcheck-arbitrary-adt
     , quickcheck-text
+    , random
     , terminal-size
     , text
     , transformers
@@ -78,6 +79,7 @@ executable spatula-exe
     , parsec
     , quickcheck-arbitrary-adt
     , quickcheck-text
+    , random
     , spatula
     , terminal-size
     , text
@@ -106,6 +108,7 @@ test-suite spatula-test
     , parsec
     , quickcheck-arbitrary-adt
     , quickcheck-text
+    , random
     , spatula
     , terminal-size
     , text

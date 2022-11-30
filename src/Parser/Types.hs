@@ -31,7 +31,7 @@ typeList :: ParserT st Type
 typeList = string "List|" *> (TList . TListInfo . Just <$> typeP) <* char '|'
 
 typeVariable :: ParserT st Type
-typeVariable = TVariable <$> typeVariableGeneric
+typeVariable = TVariable . Name <$> typeVariableGeneric
 
 -- Type-Forall = Enclosed-Type ("forall" WhiteSpace+ Type-Variable WhiteSpace* "." WhiteSpace* Kind WhiteSpace* ";" WhiteSpace* Type)
 

@@ -35,6 +35,7 @@ dependencies:
 - quickcheck-arbitrary-adt
 - quickcheck-text
 - haskeline >= 0.8.2 
+- random
 
 ghc-options:
 - -Wall

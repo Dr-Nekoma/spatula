@@ -6,6 +6,7 @@ module Types (
   Type(..), 
   AbstractionInfo(..), 
   TListInfo(..),
+  TVariableInfo(..),
   Literal(..),
   LetSort(..),
   Operator(..),
@@ -18,17 +19,18 @@ import Test.QuickCheck ( Arbitrary(arbitrary) )
 import Test.QuickCheck.Arbitrary.ADT
     ( ToADTArbitrary, genericArbitrary )
 import Text.Printf ( printf )
+import System.Random
 
-refresh :: Text -> Text
+refresh :: TVariableInfo -> TVariableInfo
 refresh = id
 
-abstractionSubstitution :: Text -> Type -> AbstractionInfo -> AbstractionInfo
+abstractionSubstitution :: TVariableInfo -> Type -> AbstractionInfo -> AbstractionInfo
 abstractionSubstitution from to abstraction@(AbstractionInfo label kind type') = 
   if label == from then abstraction else AbstractionInfo newLabel kind (typeSubstitution from to newBody)
   where newLabel = refresh label
-        newBody = typeSubstitution label (TVariable newLabel) type'
+        newBody = typeSubstitution label (TVariable (Name newLabel)) type'
 
-typeSubstitution :: Text -> Type -> Type -> Type
+typeSubstitution :: TVariableInfo -> Type -> Type -> Type
 typeSubstitution placeHolder type' target =
   case target of
     TArrow parameter returnType ->
@@ -68,7 +70,7 @@ instance Curryable Kind where
 instance Arbitrary Kind where
   arbitrary = genericArbitrary
 
-data AbstractionInfo = AbstractionInfo Text Kind Type
+data AbstractionInfo = AbstractionInfo TVariableInfo Kind Type
   deriving (Generic)
 
 instance Show AbstractionInfo where
@@ -85,7 +87,7 @@ instance Eq AbstractionInfo where
       if ident1 == ident2
       then type1 == type2
       else let newLabel = refresh ident1 
-           in typeSubstitution ident1 (TVariable newLabel) type1 == typeSubstitution ident2 (TVariable newLabel) type2
+           in typeSubstitution ident1 (TVariable (Name newLabel)) type1 == typeSubstitution ident2 (TVariable (Name newLabel)) type2
     else False
 
 data TListInfo = TListInfo (Maybe Type)
@@ -101,6 +103,19 @@ instance Eq TListInfo where
   _ == (TListInfo Nothing) = True
   (TListInfo (Just x)) == (TListInfo (Just y)) = x == y
 
+data TVariableInfo = Name Text | NameId (Text, Int) deriving Eq
+
+instance Ord TVariableInfo where
+  compare (Name label1) (Name label2) = compare label1 label2
+  compare (Name label1) (NameId (label2, _)) = compare label1 label2
+  compare (NameId (label1, _)) (Name label2) = compare label1 label2
+  compare (NameId (label1, iD1)) (NameId (label2, iD2)) = if iD1 == iD2 then EQ else compare label1 label2
+
+instance Arbitrary TVariableInfo where
+  arbitrary = genericArbitrary
+
+instance ToADTArbitrary TVariableInfo
+
 data Type
     = TUnit
     | TInteger
@@ -109,7 +124,7 @@ data Type
     | TString
     | TList TListInfo
     | TArrow Type Type
-    | TVariable Text
+    | TVariable TVariableInfo
     | TForall AbstractionInfo
     | TApplication Type Type
     | TAbstraction AbstractionInfo
@@ -124,7 +139,8 @@ instance Show Type where
   show (TList (TListInfo (Just type'))) = printf "List|%s|" (show type')
   show (TList (TListInfo Nothing)) = "List|_|"
   show (TArrow source target) = printf "%s -> %s" (show source) (show target)
-  show (TVariable label) = unpack label
+  show (TVariable (Name label)) = unpack label
+  show (TVariable (NameId (label, _))) = unpack label
   show (TForall info) = "forall " ++ show info
   show (TApplication fun arg) = printf "%s %s" (show fun) (show arg)
   show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack label) (show kind) (show type')
