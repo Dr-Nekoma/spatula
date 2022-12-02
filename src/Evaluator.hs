@@ -4,7 +4,7 @@ module Evaluator ( eval, Value(..), NativeFunction(..) ) where
 import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..) )
 import qualified Data.Map as Map
 import Data.Text ( unpack, Text )
-import Utils ( ResultT )
+import Utils ( ResultT, throwError' )
 import Text.Printf ( printf )
 import Data.Traversable
 
@@ -42,7 +42,7 @@ evalWithEnvironment _ (ELiteral literal) = pure $ VLiteral literal
 
 evalWithEnvironment env (EVariable label) =
   case Map.lookup label env of
-    Nothing -> fail $ printf "ERROR: Unbound variable %s in the environment." (unpack label)
+    Nothing -> throwError' $ printf "ERROR: Unbound variable %s in the environment." (unpack label)
     Just var -> return var
 
 evalWithEnvironment env (EAbstraction label _ _ body) =
@@ -57,7 +57,7 @@ evalWithEnvironment env (EApplication fun arg) = do
         evalWithEnvironment newEnv body
     VNativeFunction (NativeFunction natFun) ->
       natFun argValue
-    other -> fail $ printf "ERROR: Attempted to apply value %s to %s that it is not a function." (show argValue) (show other)
+    other -> throwError' $ printf "ERROR: Attempted to apply value %s to %s that it is not a function." (show argValue) (show other)
 
 evalWithEnvironment env (ECondition cond thenBranch elseBranch) = do
   test <- evalWithEnvironment env cond
@@ -67,7 +67,7 @@ evalWithEnvironment env (ECondition cond thenBranch elseBranch) = do
         evalWithEnvironment env thenBranch
       else
         evalWithEnvironment env elseBranch
-    cond' -> fail $ printf "ERROR: The condition %s is not a bool." (show cond')
+    cond' -> throwError' $ printf "ERROR: The condition %s is not a bool." (show cond')
 
 evalWithEnvironment env (ELet In bindings body) = do
   let (labels, expressions) = unzip bindings
@@ -87,7 +87,7 @@ evalWithEnvironment env (EOperation OpAnd (x:xs)) = do
   case operand of
     VLiteral (LBool False) -> return $ VLiteral (LBool False)
     VLiteral (LBool True) -> evalWithEnvironment env (EOperation OpAnd xs)
-    _ -> fail "This should never happen"
+    _ -> throwError' "This should never happen"
 
 -- TODO: Instead of relying on recursive calls of evalWithEnvironment, let's make an internal function and do the recursion there
 evalWithEnvironment _ (EOperation OpOr []) = return $ VLiteral (LBool False)
@@ -96,7 +96,7 @@ evalWithEnvironment env (EOperation OpOr (x:xs)) = do
   case operand of
     VLiteral (LBool True) -> return $ VLiteral (LBool True)
     VLiteral (LBool False) -> evalWithEnvironment env (EOperation OpOr xs)
-    _ -> fail "This should never happen"
+    _ -> throwError' "This should never happen"
 
 evalWithEnvironment _ (EOperation OpEqual []) = return $ VLiteral (LBool True)
 evalWithEnvironment env (EOperation OpEqual (x:xs:rest)) = do
@@ -110,7 +110,7 @@ evalWithEnvironment env (EOperation operator list@(_:_:_)) = do
   (x:xs) <- for list (evalWithEnvironment env)
   return $ foldl (operatorFunction operator) x xs
 
-evalWithEnvironment _ (EOperation _ _) = fail "Open an issue about this: Operators are broken during evaluation"
+evalWithEnvironment _ (EOperation _ _) = throwError' "Open an issue about this: Operators are broken during evaluation"
 
 evalWithEnvironment env (ETypeAbstraction _ _ _ body) =
   evalWithEnvironment env body

@@ -17,7 +17,7 @@ import Text.Parsec ( satisfy, many1, parserFail, Parsec, many, between, char, st
 import Data.Set ( Set, fromList, member )
 import Data.Text ( Text, pack )
 import Data.Char ( isAlphaNum, isSymbol )
-import Types ( Curryable(..), Operator(..) )
+import Types ( Curryable(..), Operator(..), TVariableInfo(..) )
 
 type ParserT st = Parsec [Char] st
 

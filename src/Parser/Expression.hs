@@ -1,16 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Expression (expressionP) where
+module Parser.Expression (expressionP, expressionsP) where
 
 import Types
     ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeAbstraction, ETypeApplication, ELet, EOperation, EList), 
-      LetSort(..), 
+      LetSort(..),
       Literal(..),
+      TVariableInfo(..),
       Operator(..))
 import Parser.Utilities --( ParserT, variableGeneric, typeVariableGeneric, openDelimiter, closeDelimiter )
 import Parser.Types
 import Parser.Kinds
 import Text.Parsec
-    ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit )
+    ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof )
 import Data.Maybe ( fromMaybe )
 
 
@@ -31,6 +32,9 @@ exprApplication = do
     ((Left _):_) -> parserFail "Unexpected type for application or type application"
     ((Right fun):args) -> return $ foldl function fun args
     _ -> error "This should never happen 💣 | exprApplication and exprETypeApplication"
+
+expressionsP :: ParserT st [Expression]
+expressionsP = many (spaces *> expressionP <* spaces) <* eof
   
 expressionP :: ParserT st Expression
 expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprAbstraction, letP, operatorP, literalListP]
@@ -43,7 +47,7 @@ exprAbstraction :: ParserT st Expression
 exprAbstraction = do
   openDelimiter *> string "lambda" *> spaces
   let argAnd a = (,) <$> (char '(' *> spaces *> variableGeneric <* spaces) <*> (a <* spaces <* char ')' <* spaces)
-  args <- openDelimiter *> many (fmap Left (argAnd typeP) <|> fmap Right (argAnd kindP)) <* closeDelimiter
+  args <- openDelimiter *> many (fmap Left (argAnd typeP) <|> fmap (\(a,b) -> Right (Name a, b)) (argAnd kindP)) <* closeDelimiter
   (returnType, body) <- (,) <$> (spaces *> optionMaybe (spaces *> char ':' *> spaces *> typeP <* spaces)) <*> expressionP <* closeDelimiter
   let fun (Right item) = ($ Nothing) . uncurry ETypeAbstraction $ item
       fun (Left item) = ($ Nothing) . uncurry EAbstraction $ item
@@ -54,11 +58,14 @@ exprAbstraction = do
 
 letP :: ParserT st Expression
 letP = 
-  let letSortP = choice $ fmap (try . (openDelimiter *>)) [In <$ string "let-in", Plus <$ string "let+"]
-      couple = between openDelimiter closeDelimiter ((,) <$> variableGeneric <*> (spaces *> expressionP))
+  let letSortP = choice $ fmap (try . (openDelimiter *> spaces *>)) [In <$ string "let-in", Plus <$ string "let+"]
+      couple = between openDelimiter closeDelimiter ((,) <$> variableGeneric <*> (spaces *> expressionP <* spaces))
       binds = between openDelimiter closeDelimiter (many (spaces *> couple <* spaces))
-  in ELet <$> letSortP <*> (spaces *> binds <* spaces) <*> expressionP
+  in ELet <$> letSortP <*> (spaces *> binds <* spaces) <*> (expressionP <* spaces <* closeDelimiter)
 
+-- [let+
+-- [let-in
+  
 operatorP :: ParserT st Expression
 operatorP = 
   let operators = [minBound .. maxBound] :: [Operator]

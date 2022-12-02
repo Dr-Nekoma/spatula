@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric #-}
 module Types ( 
-  typeSubstitution, 
+  typeSubstitution,
+  extractName,
   Curryable(..), 
   Kind(..), 
   Type(..), 
@@ -28,7 +29,7 @@ abstractionSubstitution :: TVariableInfo -> Type -> AbstractionInfo -> Abstracti
 abstractionSubstitution from to abstraction@(AbstractionInfo label kind type') = 
   if label == from then abstraction else AbstractionInfo newLabel kind (typeSubstitution from to newBody)
   where newLabel = refresh label
-        newBody = typeSubstitution label (TVariable (Name newLabel)) type'
+        newBody = typeSubstitution label (TVariable newLabel) type'
 
 typeSubstitution :: TVariableInfo -> Type -> Type -> Type
 typeSubstitution placeHolder type' target =
@@ -74,7 +75,7 @@ data AbstractionInfo = AbstractionInfo TVariableInfo Kind Type
   deriving (Generic)
 
 instance Show AbstractionInfo where
-  show (AbstractionInfo label kind type') = printf "%s. %s; %s" (unpack label) (show kind) (show type')
+  show (AbstractionInfo label kind type') = printf "%s. %s; %s" (unpack $ extractName label) (show kind) (show type')
 
 instance Arbitrary AbstractionInfo where
   arbitrary = genericArbitrary
@@ -87,7 +88,7 @@ instance Eq AbstractionInfo where
       if ident1 == ident2
       then type1 == type2
       else let newLabel = refresh ident1 
-           in typeSubstitution ident1 (TVariable (Name newLabel)) type1 == typeSubstitution ident2 (TVariable (Name newLabel)) type2
+           in typeSubstitution ident1 (TVariable newLabel) type1 == typeSubstitution ident2 (TVariable newLabel) type2
     else False
 
 data TListInfo = TListInfo (Maybe Type)
@@ -103,13 +104,21 @@ instance Eq TListInfo where
   _ == (TListInfo Nothing) = True
   (TListInfo (Just x)) == (TListInfo (Just y)) = x == y
 
-data TVariableInfo = Name Text | NameId (Text, Int) deriving Eq
+data TVariableInfo = Name Text | NameId (Text, Int) deriving (Eq, Generic)
+
+extractName :: TVariableInfo -> Text
+extractName (Name name) = name
+extractName (NameId (name, _)) = name
 
 instance Ord TVariableInfo where
   compare (Name label1) (Name label2) = compare label1 label2
   compare (Name label1) (NameId (label2, _)) = compare label1 label2
   compare (NameId (label1, _)) (Name label2) = compare label1 label2
   compare (NameId (label1, iD1)) (NameId (label2, iD2)) = if iD1 == iD2 then EQ else compare label1 label2
+
+instance Show TVariableInfo where
+  show (Name name) = show name
+  show (NameId (name, iD)) = show name ++ " - ID: " ++ show iD
 
 instance Arbitrary TVariableInfo where
   arbitrary = genericArbitrary
@@ -139,11 +148,10 @@ instance Show Type where
   show (TList (TListInfo (Just type'))) = printf "List|%s|" (show type')
   show (TList (TListInfo Nothing)) = "List|_|"
   show (TArrow source target) = printf "%s -> %s" (show source) (show target)
-  show (TVariable (Name label)) = unpack label
-  show (TVariable (NameId (label, _))) = unpack label
+  show (TVariable label) = unpack $ extractName label
   show (TForall info) = "forall " ++ show info
   show (TApplication fun arg) = printf "%s %s" (show fun) (show arg)
-  show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack label) (show kind) (show type')
+  show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack $ extractName label) (show kind) (show type')
 
 instance Curryable Type where
   kurry = TArrow
@@ -205,7 +213,7 @@ data Expression
     | EAbstraction Text Type (Maybe Type) Expression
     | EApplication Expression Expression
     | ECondition Expression Expression Expression
-    | ETypeAbstraction Text Kind (Maybe Type) Expression
+    | ETypeAbstraction TVariableInfo Kind (Maybe Type) Expression
     | ETypeApplication Expression Type
     | EList [Expression]
     deriving (Generic, Eq, Show)

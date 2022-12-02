@@ -37,6 +37,6 @@ typeVariable = TVariable . Name <$> typeVariableGeneric
 
 typeForAll :: ParserT st Type
 typeForAll = do
-  something <- between (string "forall" *> spaces) (spaces *> char ';') (AbstractionInfo <$> (typeVariableGeneric <* spaces <* char '.' <* spaces) <*> kindP)
+  something <- between (string "forall" *> spaces) (spaces *> char ';') (AbstractionInfo . Name <$> (typeVariableGeneric <* spaces <* char '.' <* spaces) <*> kindP)
   between (char '(' *> spaces) (spaces *> char ')') (TForall . something <$> typeP)
 

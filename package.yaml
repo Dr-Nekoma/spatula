@@ -28,7 +28,7 @@ dependencies:
 - bytestring
 - text
 - envparse
-- transformers
+- mtl
 - parsec
 - hspec
 - QuickCheck

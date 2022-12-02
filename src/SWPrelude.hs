@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE LambdaCase #-}
 module SWPrelude ( evaluatorPrelude, typerPrelude ) where
 
 import Types
@@ -9,6 +9,7 @@ import Utils ( ResultT )
 import Control.Monad.IO.Class (liftIO)
 import Evaluator
 import Data.Traversable ( for )
+import Control.Monad ( foldM )
 
 evaluatorPrelude :: Map.Map Text Value
 evaluatorPrelude = Map.fromList $
@@ -18,14 +19,14 @@ evaluatorPrelude = Map.fromList $
                        ("cdr", cdr),
                        ("map", map'),
                        ("filter", filter'),
-                       ("fold", fold'),
-                       ("foldBack", foldBack)]
+                       ("fold", fold' id),
+                       ("foldBack", fold' reverse)]
   
 typerPrelude :: Map.Map Text Type
 typerPrelude = Map.fromList list
-    where list = [("print", TForall $ AbstractionInfo "T" StarK (TArrow (TVariable "T") TUnit)),
-                  ("car", TForall $ AbstractionInfo "T" StarK (TArrow (TList . TListInfo . Just $ TVariable "T") (TVariable "T"))),
-                  ("cdr", TForall $ AbstractionInfo "T" StarK (TArrow (TList . TListInfo . Just $ TVariable "T") (TList . TListInfo . Just $ TVariable "T"))),
+    where list = [("print", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TVariable (Name "T")) TUnit)),
+                  ("car", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TVariable (Name "T")))),
+                  ("cdr", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TList . TListInfo . Just $ TVariable (Name "T")))),
                   ("map", mapType),
                   ("filter", filterType),
                   ("fold", foldType),
@@ -33,21 +34,21 @@ typerPrelude = Map.fromList list
 
 mapType :: Type
 mapType =
-  TForall $ AbstractionInfo "A" StarK
-  (TForall $ AbstractionInfo "B" StarK
-   (TArrow (TArrow (TVariable "A") (TVariable "B")) (TArrow (TList . TListInfo . Just $ TVariable "A") (TList . TListInfo . Just $ TVariable "B"))))
+  TForall $ AbstractionInfo (Name "A") StarK
+  (TForall $ AbstractionInfo (Name "B") StarK
+   (TArrow (TArrow (TVariable (Name "A")) (TVariable (Name "B"))) (TArrow (TList . TListInfo . Just $ TVariable (Name "A")) (TList . TListInfo . Just $ TVariable (Name "B")))))
 
 filterType :: Type
 filterType =
-  TForall $ AbstractionInfo "A" StarK
-   (TArrow (TArrow (TVariable "A") TBool) (TArrow (TList . TListInfo . Just $ TVariable "A") (TList . TListInfo . Just $ TVariable "A")))
+  TForall $ AbstractionInfo (Name "A") StarK
+   (TArrow (TArrow (TVariable (Name "A")) TBool) (TArrow (TList . TListInfo . Just $ TVariable (Name "A")) (TList . TListInfo . Just $ TVariable (Name "A"))))
 
 foldType :: Type
 foldType =
-  TForall $ AbstractionInfo "A" StarK
-  (TForall $ AbstractionInfo "B" StarK
-   (TArrow (TArrow (TVariable "A") (TArrow (TVariable "B") (TVariable "B"))) 
-     (TArrow (TVariable "B") (TArrow (TList . TListInfo . Just $ TVariable "A") (TVariable "B")))))
+  TForall $ AbstractionInfo (Name "A") StarK
+  (TForall $ AbstractionInfo (Name "B") StarK
+   (TArrow (TArrow (TVariable (Name "A")) (TArrow (TVariable (Name "B")) (TVariable (Name "B")))) 
+     (TArrow (TVariable (Name "B")) (TArrow (TList . TListInfo . Just $ TVariable (Name "A")) (TVariable (Name "B"))))))
 
 car :: Value -> ResultT Value
 car (VList []) = fail "Can't apply 'car' function in empty lists"
@@ -60,50 +61,45 @@ cdr (VList list) = return . VList . tail $ list
 cdr _ = fail "Function 'car' can only be applied to lists"
 
 map' :: Value -> ResultT Value
-map' = \value ->
-         case value of
-           VClosure label body env ->
-             return $ VNativeFunction . NativeFunction $
-               \list -> case list of
-                          VList list' -> VList <$> for list' (\a -> eval (Map.insert label a env) body)
-                          _ -> fail "Expecting a list as an argument for the map function"
-           _ -> fail "Expecting a closure for the map function"
+map' fun =
+  let fun' = getFunctionalValue fun
+  in return $ VNativeFunction . NativeFunction
+      $ \case
+         VList list'
+           -> VList <$> for list' fun'
+         _ -> fail "Expecting a list as an argument for the map function"
 
 filter' :: Value -> ResultT Value
-filter' = \value ->
-         case value of
-           VClosure label body env ->
-             return $ VNativeFunction . NativeFunction $
-               \list -> case list of
-                          VList list' -> VList . (map fst) . (filter (\(_,a) -> a == VLiteral (LBool True))) . (zip list') <$> for list' (\a -> eval (Map.insert label a env) body)
-                          _ -> fail "Expecting a list as an argument for the filter function"
-           _ -> fail "Expecting a closure for the filter function"
-           
--- (a -> b -> b) -> b -> t a -> b
+filter' fun =
+  let fun' = getFunctionalValue fun
+  in return $ VNativeFunction . NativeFunction
+      $ \case
+         VList list'
+           -> VList
+                . map fst
+                   . filter (\ (_, a) -> a == VLiteral (LBool True)) . zip list'
+                <$> for list' fun'
+         _ -> fail "Expecting a list as an argument for the filter function"
 
-fold' :: Value -> ResultT Value
-fold' = undefined
--- fold' = \value ->
---          case value of
---            VClosure label body env ->
---              return $ VNativeFunction . NativeFunction $
---                \acc -> return $ VNativeFunction . NativeFunction $
---                         \list -> case list of
---                           VList list' -> do
---                             let fun element = do
---                                   partialFunction <- runExceptT $ eval (Map.insert label a env) body
---                                     case partialFunction of
---                                       Left error -> fail error
---                                       Right function -> 
---                                         case function of
---                                           VClosure label' body' env' -> eval (Map.insert label' acc env') body'            
---                                           _ -> fail "Expected a closure in the fold found something else"
---                             for list' fun
---                           _ -> fail "Expecting a list as an argument for the filter function" 
---            _ -> fail "Expecting a closure for the fold function"
+foldAux :: (Value -> ResultT Value) -> Value -> Value -> ResultT Value
+foldAux fun' element acc = do
+  next <- fun' acc
+  getFunctionalValue next element
 
-foldBack :: Value -> ResultT Value
-foldBack = undefined
+getFunctionalValue :: Value -> Value -> ResultT Value
+getFunctionalValue (VClosure label body env) = \element -> eval (Map.insert label element env) body
+getFunctionalValue (VNativeFunction (NativeFunction fun)) = fun
+getFunctionalValue _ = error "Should not happen"
+    
+fold' :: ([Value] -> [Value]) -> Value -> ResultT Value
+fold' transform fun =
+   let fun' = getFunctionalValue fun
+   in return $ VNativeFunction . NativeFunction
+       $ \acc -> return $ VNativeFunction . NativeFunction
+          $ \case
+             VList list'
+               -> foldM (foldAux fun') acc (transform list')
+             _ -> fail "Expecting a list as an argument for the fold function"
 
 ourPrint :: Value -> ResultT Value
 ourPrint value = do

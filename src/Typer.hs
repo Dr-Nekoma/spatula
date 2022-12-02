@@ -5,6 +5,7 @@ module Typer ( typeCheck ) where
 import Types
     ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString, TList),
       TListInfo(..),
+      TVariableInfo(..),
       Kind(..),
       Expression(..),
       LetSort(..),
@@ -15,24 +16,24 @@ import Types
 import Data.List ( find )
 import Data.Text (pack, Text)
 import Text.Printf ( printf )
-import Utils ( Result )
+import Utils ( ResultT, throwError' )
 import Data.Traversable
 import qualified Data.Map as Map
 import SWPrelude
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
-  , kindContext :: Map.Map Text Kind
+  , kindContext :: Map.Map TVariableInfo Kind
   } deriving (Eq, Show)
 
-typeCheckWithEnvironment :: TyperEnv -> Expression -> Result Type
-typeCheckWithEnvironment env (EList list) =
+typeCheckWithEnvironment :: TyperEnv -> Expression -> ResultT Type
+typeCheckWithEnvironment env (EList list) = do
   let allSameType type' = all (== type')
-  in case for list (fmap reduceType . typeCheckWithEnvironment env) of
-    Right [] -> pure $ (TList . TListInfo) Nothing 
-    Right (x:xs) | allSameType x xs -> pure $ (TList . TListInfo) (Just x)
-    Right (x:_) -> Left $ pack $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
-    Left e -> Left e
+  listTypes <- for list (fmap reduceType . typeCheckWithEnvironment env)
+  case listTypes of
+    [] -> pure $ (TList . TListInfo) Nothing 
+    (x:xs) | allSameType x xs -> pure $ (TList . TListInfo) (Just x)
+    (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
 
 typeCheckWithEnvironment _ (ELiteral literal) =
   case literal of
@@ -44,7 +45,7 @@ typeCheckWithEnvironment _ (ELiteral literal) =
 
 typeCheckWithEnvironment TyperEnv{..} (EVariable label) =
   case Map.lookup label variableTypes of
-    Nothing -> Left $ pack $ printf "TYPE ERROR: Unbound variable %s in the environment." label
+    Nothing -> throwError' $ printf "TYPE ERROR: Unbound variable %s in the environment." label
     Just type' -> pure type'
 
 typeCheckWithEnvironment env@TyperEnv{..} (ELet In bindings body) = do
@@ -73,10 +74,10 @@ typeCheckWithEnvironment env@TyperEnv{..} (EAbstraction label type' returnType e
                                         reducedResultType = reduceType resultType
                                     if reducedAnnotatedType == reducedResultType
                                     then pure $ TArrow type' rt
-                                    else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
-                        other -> Left $ pack $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
+                                    else throwError' $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+                        other -> throwError' $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
         Nothing -> pure $ TArrow type' resultType
-    other -> Left $ pack $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
+    other -> throwError' $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
 
 typeCheckWithEnvironment env (EApplication fun arg) = do
   reducedFunType <- reduceType <$> typeCheckWithEnvironment env fun
@@ -86,8 +87,8 @@ typeCheckWithEnvironment env (EApplication fun arg) = do
       let reducedParameterType = reduceType parameterType
       if reducedArgType == reducedParameterType
         then pure resultType
-      else Left $ pack $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
-    _ -> Left $ pack $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (show reducedFunType)
+      else throwError' $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
+    _ -> throwError' $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (show reducedFunType)
 
 typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
   condType <- typeCheckWithEnvironment env cond
@@ -100,8 +101,8 @@ typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
           reducedElseType = reduceType elseBranchType
       if reducedThenType == reducedElseType
         then pure thenBranchType
-        else Left $ pack $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show thenBranchType) (show elseBranchType)
-    _ -> Left $ pack $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show condType)
+        else throwError' $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show thenBranchType) (show elseBranchType)
+    _ -> throwError' $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show condType)
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
 typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnType body) = do
@@ -114,8 +115,8 @@ typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnTyp
                                     reducedResultType = reduceType resultType
                                 if reducedAnnotatedType == reducedResultType
                                 then pure $ TForall $ AbstractionInfo label kind rt
-                                else Left $ pack $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
-                    other -> Left $ pack $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
+                                else throwError' $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+                    other -> throwError' $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
     Nothing -> pure $ TForall $ AbstractionInfo label kind resultType
 
 typeCheckWithEnvironment env (ETypeApplication expr type') = do
@@ -125,10 +126,10 @@ typeCheckWithEnvironment env (ETypeApplication expr type') = do
      expectedKind <- kindCheckWithEnvironment env type'
      if kind == expectedKind
        then pure $ typeSubstitution identifier type' bodyType
-       else Left $ pack $ printf "KIND ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
-    _ -> Left $ pack $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
+       else throwError' $ printf "KIND ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
+    _ -> throwError' $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
     
-typeCheckWithEnvironment _ (EOperation _ []) = Left "TYPE ERROR: Operators don't type check with no elements"
+typeCheckWithEnvironment _ (EOperation _ []) = throwError' "TYPE ERROR: Operators don't type check with no elements"
 
 -- TODO: Check properly the arithmetic operators with the exhaustiveness -> THIS IS A TRAP
 typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
@@ -142,33 +143,33 @@ typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
       checkIfJust _ = False
 
   case operator of
-    OpAnd -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: And operator asks for booleans."
-    OpOr  -> if checkIfAll TBool operandsTypes then pure TBool else Left "TYPE ERROR: Or operator asks for booleans."
+    OpAnd -> if checkIfAll TBool operandsTypes then pure TBool else throwError' "TYPE ERROR: And operator asks for booleans."
+    OpOr  -> if checkIfAll TBool operandsTypes then pure TBool else throwError' "TYPE ERROR: Or operator asks for booleans."
     OpConcat -> 
       case find (not . checkIfList) operandsTypes of
         Just different -> 
-          Left $ pack $ printf "TYPE ERROR: Expected a List|_| but found '%s'" (show different)
+          throwError' $ printf "TYPE ERROR: Expected a List|_| but found '%s'" (show different)
         Nothing ->
           case filter checkIfJust operandsTypes of
             (y:ys) ->
               case find (/= y) ys of
                 Just different -> 
-                  Left $ pack $ printf "TYPE ERROR: Attempting to concat lists with distinct types. Received '%s' while expected 's'." (show different) (show y)
+                  throwError' $ printf "TYPE ERROR: Attempting to concat lists with distinct types. Received '%s' while expected 's'." (show different) (show y)
                 Nothing -> pure y
             _ -> pure $ (TList . TListInfo) Nothing
     OpEqual -> do
       case find (/= x) xs of
-        Just firstDifferent -> Left $ pack $ printf "TYPE ERROR: Mismatch between elements at an equality comparison. Expected '%s' but got '%s'" (show x) (show firstDifferent)
+        Just firstDifferent -> throwError' $ printf "TYPE ERROR: Mismatch between elements at an equality comparison. Expected '%s' but got '%s'" (show x) (show firstDifferent)
         Nothing -> pure x
     arithmetics -- Arithmetic
       | checkIfAll TRational operandsTypes -> pure $ if operator == OpLessThan then TBool else TRational
       | checkIfAll TInteger operandsTypes  -> pure $ if operator == OpLessThan then TBool else TInteger
-      | otherwise -> Left $ pack $ printf "TYPE ERROR: Arithmetic operator %s must use only numbers of the same sort." (show arithmetics)
+      | otherwise -> throwError' $ printf "TYPE ERROR: Arithmetic operator %s must use only numbers of the same sort." (show arithmetics)
       
-typeCheck :: Expression -> Result Type
+typeCheck :: Expression -> ResultT Type
 typeCheck = typeCheckWithEnvironment (TyperEnv typerPrelude Map.empty)
 
-kindCheckWithEnvironment :: TyperEnv -> Type -> Result Kind
+kindCheckWithEnvironment :: TyperEnv -> Type -> ResultT Kind
 kindCheckWithEnvironment env@TyperEnv{..} type' =
   case type' of
     TUnit -> pure StarK
@@ -181,30 +182,30 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
       internalKind <- kindCheckWithEnvironment env x
       case internalKind of
         StarK -> pure StarK
-        other -> Left $ pack $ printf "Internal types of lists should have kind * and this has %s" (show other)
+        other -> throwError' $ printf "Internal types of lists should have kind * and this has %s" (show other)
     TVariable label ->
       let kind = Map.lookup label kindContext in
-      maybe (Left $ pack $ printf "Unbound type variable %s in the environment." (show label)) Right kind
+      maybe (throwError' $ printf "Unbound type variable %s in the environment." (show label)) return kind
     TArrow input output -> do
       kindInput <- kindCheckWithEnvironment env input
       kindOutput <- kindCheckWithEnvironment env output
       case (kindInput, kindOutput) of
         (StarK, StarK) -> pure StarK
-        (left, right) -> Left $ pack $ printf "Expression arrow must have kind * -> * and it has %s -> %s." (show left) (show right)
+        (left, right) -> throwError' $ printf "Expression arrow must have kind * -> * and it has %s -> %s." (show left) (show right)
     TForall (AbstractionInfo identifier kind bodyType) -> do
        let newEnv = Map.insert identifier kind kindContext
        kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
        case kindBody of
         StarK -> pure StarK
-        kind' -> Left $ pack $ printf "Foralls should return * but this has %s." (show kind')
+        kind' -> throwError' $ printf "Foralls should return * but this has %s." (show kind')
     TApplication abstractionType argumentType -> do
       kindAbs <- kindCheckWithEnvironment env abstractionType
       kindArg <- kindCheckWithEnvironment env argumentType
       case kindAbs of
         (ArrowK k1 k2) -> if k1 == kindArg
                           then pure k2
-                          else Left $ pack $ printf "Kind argument %s does not match expected kind %s." (show kindArg) (show k1) 
-        kind' -> Left $ pack $ printf "Type abstraction of kind %s is not a arrow kind" (show kind')
+                          else throwError' $ printf "Kind argument %s does not match expected kind %s." (show kindArg) (show k1) 
+        kind' -> throwError' $ printf "Type abstraction of kind %s is not a arrow kind" (show kind')
     TAbstraction (AbstractionInfo label kind bodyType) -> do
       let newEnv = Map.insert label kind kindContext
       kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
