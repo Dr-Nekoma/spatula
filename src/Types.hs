@@ -180,7 +180,7 @@ instance Show Literal where
   show (LInteger int) = show int
   show (LRational rational) = show rational
   show (LBool bool) = show bool
-  show (LString string) = unpack string
+  show (LString string) = "\"" ++ unpack string ++ "\""
 
 data LetSort = In | Plus
   deriving (Generic, Eq, Show)

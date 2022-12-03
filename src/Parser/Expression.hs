@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Expression (expressionP, expressionsP) where
+module Parser.Expression where
 
 import Types
     ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeAbstraction, ETypeApplication, ELet, EOperation, EList), 
@@ -10,8 +10,9 @@ import Types
 import Parser.Utilities --( ParserT, variableGeneric, typeVariableGeneric, openDelimiter, closeDelimiter )
 import Parser.Types
 import Parser.Kinds
+import Data.Text (pack)
 import Text.Parsec
-    ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof )
+    ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof, manyTill, anyChar )
 import Data.Maybe ( fromMaybe )
 
 
@@ -88,7 +89,10 @@ unit :: ParserT st Literal
 unit = LUnit <$ string "()"
 
 stringP :: ParserT st Literal
-stringP = LString <$> between (char '"') (char '"') variableGeneric
+stringP = do
+  char '"'
+  str <- manyTill anyChar (try $ char '"')
+  return $ LString (pack str)
 
 rational :: ParserT st Literal
 rational = do

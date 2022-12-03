@@ -4,12 +4,15 @@ module SWPrelude ( evaluatorPrelude, typerPrelude ) where
 
 import Types
 import qualified Data.Map as Map
-import Data.Text ( Text ) 
-import Utils ( ResultT )
+import Utils ( ResultT, throwError' )
 import Control.Monad.IO.Class (liftIO)
 import Evaluator
+import Data.Text ( Text, unpack, pack )
 import Data.Traversable ( for )
 import Control.Monad ( foldM )
+import Text.Printf ( printf )
+import Control.Exception ( IOException, catch, throwIO )
+import System.IO.Error ( isDoesNotExistError )
 
 evaluatorPrelude :: Map.Map Text Value
 evaluatorPrelude = Map.fromList $
@@ -20,7 +23,9 @@ evaluatorPrelude = Map.fromList $
                        ("map", map'),
                        ("filter", filter'),
                        ("fold", fold' id),
-                       ("foldBack", fold' reverse)]
+                       ("foldBack", fold' reverse),
+                       ("readLines", readLines),
+                       ("readFile", readFile')]
   
 typerPrelude :: Map.Map Text Type
 typerPrelude = Map.fromList list
@@ -30,7 +35,17 @@ typerPrelude = Map.fromList list
                   ("map", mapType),
                   ("filter", filterType),
                   ("fold", foldType),
-                  ("foldBack", foldType)]
+                  ("fold-back", foldType),
+                  ("readLines", readLinesType),
+                  ("readFile", readFileType)]
+
+readLinesType :: Type
+readLinesType =
+  TArrow TString (TList . TListInfo . Just $ TString)
+
+readFileType :: Type
+readFileType =
+  TArrow TString TString
 
 mapType :: Type
 mapType =
@@ -59,6 +74,30 @@ cdr :: Value -> ResultT Value
 cdr (VList []) = fail "Can't apply 'cdr' to an empty list"
 cdr (VList list) = return . VList . tail $ list
 cdr _ = fail "Function 'car' can only be applied to lists"
+
+safeRead :: String -> IO (Maybe Text)
+safeRead path = (fmap (Just . pack) $ readFile path) `catch` handleExists
+  where
+    handleExists :: IOException -> IO (Maybe Text)
+    handleExists e
+      | isDoesNotExistError e = return Nothing
+      | otherwise = throwIO e
+
+readLines :: Value -> ResultT Value
+readLines (VLiteral (LString path)) = do
+  maybeContent <- liftIO $ safeRead (unpack path)
+  case maybeContent of
+    Nothing -> throwError' $ printf "Couldn't find file from path %s" (unpack path)
+    Just content -> return . VList $ map (VLiteral . LString . pack) (lines $ unpack content)
+readLines _ = fail ""
+
+readFile' :: Value -> ResultT Value
+readFile' (VLiteral (LString path)) = do
+  maybeContent <- liftIO $ safeRead (unpack path)
+  case maybeContent of
+    Nothing -> throwError' $ printf "Couldn't find file from path %s" (unpack path)
+    Just content -> return . VLiteral $ LString content
+readFile' _ = fail ""
 
 map' :: Value -> ResultT Value
 map' fun =

@@ -40,3 +40,6 @@ typeForAll = do
   something <- between (string "forall" *> spaces) (spaces *> char ';') (AbstractionInfo . Name <$> (typeVariableGeneric <* spaces <* char '.' <* spaces) <*> kindP)
   between (char '(' *> spaces) (spaces *> char ')') (TForall . something <$> typeP)
 
+-- \forall list:( * -> *) -> \forall t: * -> \x: list f -> x
+-- forall List (-> * *) -> \forall t: * -> \x: list f -> x  
+

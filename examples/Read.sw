@@ -1,0 +1,2 @@
+[readFile "examples/Read.sw"]
+

@@ -13,10 +13,10 @@ module Parser.Utilities
   )
 where
  
-import Text.Parsec ( satisfy, many1, parserFail, Parsec, many, between, char, string, spaces )
+import Text.Parsec ( satisfy, many1, parserFail, Parsec, many, between, char, string, spaces, try, choice)
 import Data.Set ( Set, fromList, member )
 import Data.Text ( Text, pack )
-import Data.Char ( isAlphaNum, isSymbol )
+import Data.Char ( isAlphaNum, isSymbol, isAscii )
 import Types ( Curryable(..), Operator(..), TVariableInfo(..) )
 
 type ParserT st = Parsec [Char] st
