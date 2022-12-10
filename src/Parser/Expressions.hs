@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Expression where
+module Parser.Expressions where
 
 import Types
     ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeAbstraction, ETypeApplication, ELet, EOperation, EList), 
@@ -14,7 +14,6 @@ import Data.Text (pack)
 import Text.Parsec
     ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof, manyTill, anyChar )
 import Data.Maybe ( fromMaybe )
-
 
 exprLiteral :: ParserT st Expression
 exprLiteral = ELiteral <$> literal
@@ -63,9 +62,6 @@ letP =
       couple = between openDelimiter closeDelimiter ((,) <$> variableGeneric <*> (spaces *> expressionP <* spaces))
       binds = between openDelimiter closeDelimiter (many (spaces *> couple <* spaces))
   in ELet <$> letSortP <*> (spaces *> binds <* spaces) <*> (expressionP <* spaces <* closeDelimiter)
-
--- [let+
--- [let-in
   
 operatorP :: ParserT st Expression
 operatorP = 

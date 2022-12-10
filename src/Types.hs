@@ -11,7 +11,8 @@ module Types (
   Literal(..),
   LetSort(..),
   Operator(..),
-  Expression(..)) where
+  Expression(..),
+  Declaration(..)) where
 
 import Data.Text.Arbitrary ( Text )
 import Data.Text ( unpack )
@@ -204,6 +205,19 @@ instance Arbitrary LetSort where
 
 instance Arbitrary Operator where
   arbitrary = genericArbitrary
+
+data Declaration
+    = DeclExpr Expression
+    | DeclFun Text (Maybe Type) Expression
+    deriving (Generic, Eq)
+
+instance Arbitrary Declaration where
+  arbitrary = genericArbitrary
+
+instance Show Declaration where
+  show (DeclExpr expr) = "Expression: " ++ show expr
+  show (DeclFun name Nothing expr) = "Function " ++ unpack name ++ " = " ++ show expr
+  show (DeclFun name (Just t) expr) = "Function " ++ unpack name ++ " : " ++ show t ++ " = " ++ show expr
 
 data Expression
     = ELiteral Literal

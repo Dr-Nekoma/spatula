@@ -1,7 +1,10 @@
 module Parser
   (
-    module Parser.Expression
+    module Parser.Declarations,
+    module Parser.Expressions
   )
   where
 
-import Parser.Expression
+import Parser.Expressions
+import Parser.Declarations
+

@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main (main) where
 
@@ -16,8 +17,9 @@ import SWPrelude
 import System.IO ( hFlush, stdout )
 import System.Console.Haskeline
 import Control.Monad.IO.Class
-import Control.Monad ( when )
+import Control.Monad ( when, msum )
 import Data.Foldable ( for_ )
+import Data.List ( stripPrefix, isPrefixOf )
 
 fullExecution :: String -> IO ()
 fullExecution content = do
@@ -33,24 +35,37 @@ fullExecution content = do
                                       Left errorEvaluator -> TIO.putStrLn $ "\ESC[91m" <> errorEvaluator
                                       Right result -> printMessage (Right result :: Either Text Value))
 
+getType parser content = do
+  case parse parser "" content of
+    Left errorParse -> error $ show errorParse
+    Right ast -> do
+      typed <- runExceptT $ typeCheck ast
+      either (\e -> TIO.putStrLn $ "\ESC[91m" <> e) (\x -> printMessage (Right x :: Either Text Type)) typed
+
+executeCommand :: (t -> IO a) -> t -> InputT IO ()
+executeCommand command str = do
+  liftIO $ command str
+  liftIO $ putStr "\ESC[00m"
+  insertion
+
+flushRepl = liftIO $ hFlush stdout
+
+insertion :: InputT IO ()
+insertion = do
+  minput <- getInputLine "🥄🔪\ESC[94m|λ>\ESC[00m "
+  case minput of
+    Nothing -> flushRepl >> insertion
+    Just command -> do
+      flushRepl
+      if command == ":quit" || command == ":q" then return ()
+      else do
+        let typeList = msum $ sequence [stripPrefix ":type ", stripPrefix ":t "] command
+        case typeList of
+          Just command' -> executeCommand (getType expressionP) command'
+          Nothing -> executeCommand fullExecution command
+
 repl :: IO ()
-repl = do runInputT defaultSettings insertion
-  where
-      insertion :: InputT IO ()
-      insertion = do
-        minput <- getInputLine "🥄🔪\ESC[94m|λ>\ESC[00m "
-        case minput of
-          Nothing -> do
-            liftIO $ hFlush stdout
-            insertion
-          Just command -> do
-            liftIO $ hFlush stdout
-            if command == ":quit" || command == ":q"
-            then return ()
-            else do
-              liftIO $ fullExecution command
-              liftIO $ putStr "\ESC[00m"
-              insertion
+repl = runInputT defaultSettings insertion
 
 printMessage :: (Show a, Show b) => Either a b -> IO ()
 printMessage (Left error') = TIO.putStrLn $ append (pack "\ESC[91m") (pack $ show error')

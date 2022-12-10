@@ -1,5 +1,9 @@
 [+ 1 2]
 
+[defun abc (f (-> Integer Integer)) (y Integer): List|Integer|
+  [let-in [[x '[1 2 3 4 y]]]
+    [map Integer Integer f x]]]
+
 [fold Integer Integer
   [lambda [(element Integer) (accumulator Integer)] : Integer [* element accumulator]]
   1

@@ -28,7 +28,8 @@ library
       CL
       Evaluator
       Parser
-      Parser.Expression
+      Parser.Declarations
+      Parser.Expressions
       Parser.Kinds
       Parser.Types
       Parser.Utilities
