@@ -12,7 +12,7 @@ import qualified Data.Text.IO as TIO
 import Parser
 import Text.Parsec (parse, ParseError)
 import Data.List ( stripPrefix, find )
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import Control.Monad.Except ( runExceptT )
 import Control.Monad.State
 import SWPrelude
@@ -20,8 +20,11 @@ import qualified Data.Map as Map
 import Utils
 import Data.Either.Extra
 import Data.Foldable
+import Data.Maybe
+import Control.Monad.Except
 
-type ReplT a = StateT EvalEnv (InputT IO) a
+
+type ReplT a = StateT (TyperEnv, EvalEnv) (InputT IO) a
 
 type Command = Either String (SpecialOption, Maybe String)
 
@@ -45,36 +48,57 @@ instance Options SpecialOption where
     where (long, short) = showOptions option
 
 findSpecialOption :: (SpecialOption, Maybe String) -> Bool
-findSpecialOption (_, Nothing) = False
-findSpecialOption (_, Just _) = True
+findSpecialOption = isJust . snd
 
 liftRepl :: IO a -> ReplT a
 liftRepl = lift . liftIO
 
+replError :: Show a => a -> ReplT ()
+replError = liftRepl . putStrLn . unpack . buildError
+
+replSuccess :: Show a => a -> ReplT ()
+replSuccess = liftRepl . putStrLn . unpack . buildMessage
+
+replMessage :: (Show a, Show b) => Either a b -> ReplT ()
+replMessage (Left e) = replError e
+replMessage (Right i) = replSuccess i
+
 addDeclaration :: Text -> Expression -> ReplT ()
-addDeclaration name body =
-   do env <- get
-      result <- liftRepl . runExceptT $ evalExpression env body
-      case result of
-        Left e -> liftRepl $ printMessage (Left e :: Either Text Value)
-        Right value -> do
-          let newEnv = Map.insert name value env
-          put newEnv
+addDeclaration name body = do
+  typedValue <- typeCheckEval body
+  case typedValue of
+    Left e -> replError e
+    Right (t,v) -> do
+     (TyperEnv typerEnv _, evalEnv) <- get
+     let newTyperEnv = Map.insert name t typerEnv
+     put (TyperEnv newTyperEnv Map.empty, Map.insert name v evalEnv)
+
+typeCheckEval :: Expression -> ReplT (Result (Type, Value))
+typeCheckEval expr = do
+   (typerEnv, evalEnv) <- get
+   type' <- liftIO $ runExceptT $ typeCheckExpression typerEnv expr
+   case type' of
+     Left errorType -> return (Left $ buildError (errorType :: Text))
+     Right t -> do
+       result <- liftIO $ runExceptT $ evalExpression evalEnv expr
+       case result of
+         Left e -> return (Left $ buildError (e :: Text))
+         Right v -> return (Right (t, v))
 
 singleExecution :: String -> ReplT ()
 singleExecution content = do
   case parse declarationP "" content of
-    Left errorParse -> liftRepl $ printMessage (Left errorParse :: Either ParseError Expression)
+    Left errorParse -> replError (errorParse :: ParseError)
     Right decl -> do
         case decl of
-          DeclExpr expr ->
-            do type' <- liftRepl . runExceptT $ typeCheckExpression (TyperEnv typerPrelude Map.empty) expr
+          DeclExpr expr -> do
+            (typerEnv, evalEnv) <- get        
+            do type' <- liftRepl . runExceptT $ typeCheckExpression typerEnv expr
                case type' of
-                 Left errorType -> liftRepl $ printMessage (Left errorType :: Either Text Type)
+                 Left errorType -> replError (errorType :: Text)
                  Right _ -> do
-                   env <- get        
-                   result <- liftRepl . runExceptT $ evalExpression env expr
-                   liftRepl $ printMessage result
+                   result <- liftRepl . runExceptT $ evalExpression evalEnv expr
+                   replMessage result
           DeclDef name body -> addDeclaration name body
 
 getType :: String -> ReplT ()
@@ -82,25 +106,23 @@ getType content = do
   case parse expressionP "" content of
     Left errorParse -> error $ show errorParse
     Right ast -> do
-      typed <- liftRepl $ runExceptT $ typeCheckExpression (TyperEnv typerPrelude Map.empty) ast
-      either (\e -> liftRepl $ TIO.putStrLn $ "\ESC[91m" <> e) (\x -> liftRepl $ printMessage (Right x :: Either Text Type)) typed
+      (typerEnv, _) <- get
+      typed <- liftRepl $ runExceptT $ typeCheckExpression typerEnv ast
+      either replError replSuccess typed
 
 importFile :: FilePath -> ReplT ()
 importFile path = do
   content <- liftRepl $ readFile path
   case parse fileP "" content of
     Left errorParse -> error $ show errorParse
-    Right decls ->
-        for_ decls
-          (\case
-            DeclExpr _ -> return ()
-            DeclDef name body -> addDeclaration name body)
+    Right decls -> do
+     for_ decls
+        (\case
+          DeclExpr _ -> return ()
+          DeclDef name body -> addDeclaration name body)
 
 getParsed :: String -> ReplT ()
-getParsed content = do
-  case parse declarationP "" content of
-    Left errorParse -> error $ show errorParse
-    Right ast -> liftRepl $ printMessage (Right ast :: Either Text Declaration)
+getParsed content = replMessage $ parse declarationP "" content
 
 executeCommand :: (t -> ReplT ()) -> t -> ReplT ()
 executeCommand command str = do
@@ -119,10 +141,10 @@ executeSpecialOption Import remaining = executeCommand importFile remaining
 executeSpecialOption Parsed remaining = executeCommand getParsed remaining
 executeSpecialOption SType remaining = executeCommand getType remaining
 
-flushRepl :: StateT EvalEnv (InputT IO) ()
+flushRepl :: ReplT ()
 flushRepl = liftRepl $ hFlush stdout
 
-insertion :: StateT EvalEnv (InputT IO) ()
+insertion :: ReplT ()
 insertion = do
   minput <- lift $ getInputLine "🥄\ESC[94m|λ>\ESC[00m "
   case minput of
@@ -134,8 +156,8 @@ insertion = do
         Right (option, Just remaining) -> executeSpecialOption option remaining
         _ -> error "This should be impossible"
 
-runReplT :: IO ((), EvalEnv)
-runReplT =  runInputT defaultSettings $ runStateT insertion evaluatorPrelude
+runReplT :: IO ((), (TyperEnv, EvalEnv))
+runReplT = runInputT defaultSettings $ runStateT insertion (TyperEnv typerPrelude Map.empty, evaluatorPrelude)
 
 repl :: IO ()
 repl = void runReplT

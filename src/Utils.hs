@@ -1,9 +1,8 @@
-module Utils ( Result, ResultT, throwError', printMessage ) where
+module Utils ( Result, ResultT, throwError', buildMessage, buildError ) where
 
 import Control.Monad.Except
 import Data.String ( IsString(..) )
-import qualified Data.Text.IO as TIO
-import Data.Text (append, pack, Text)
+import Data.Text ( Text, pack )
 
 type Result a = Either Text a
 type ResultT a = ExceptT Text IO a
@@ -14,7 +13,9 @@ type ResultT a = ExceptT Text IO a
 throwError' :: (IsString e, MonadError e m) => String -> m a
 throwError' = throwError . fromString
 
-printMessage :: (Show a, Show b) => Either a b -> IO ()
-printMessage (Left error') = TIO.putStrLn $ append (pack "\ESC[91m") (pack $ show error')
-printMessage (Right something) = TIO.putStrLn $ append (pack "\ESC[94m") (pack $ show something)
+buildError :: Show a => a -> Text
+buildError error' =  pack $ "\ESC[91m" ++ show error'
+
+buildMessage :: Show a => a -> Text
+buildMessage something = pack $ "\ESC[94m" ++ show something
 

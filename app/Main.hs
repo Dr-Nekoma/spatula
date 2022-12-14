@@ -8,7 +8,7 @@ import CL
 import Evaluator
 import Typer
 import Types
-import Data.Text ( Text, append, pack)
+import Data.Text ( Text, append, pack, unpack)
 import qualified Data.Text.IO as TIO
 import Text.Parsec (parse, ParseError)
 import Parser
@@ -23,7 +23,7 @@ import Repl
 fullExecution :: String -> IO ()
 fullExecution content = do
   case parse fileP "" content of
-    Left errorParse -> printMessage (Left errorParse :: Either ParseError Expression)
+    Left errorParse -> putStrLn . unpack $ buildError (errorParse :: ParseError)
     Right decls -> do
         typeEnv' <- runExceptT $ typeCheckDeclarations (TyperEnv typerPrelude Map.empty) decls
         case typeEnv' of
