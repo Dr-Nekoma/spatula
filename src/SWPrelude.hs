@@ -142,5 +142,5 @@ fold' transform fun =
 
 ourPrint :: Value -> ResultT Value
 ourPrint value = do
-    liftIO $ print (show value)
+    liftIO $ print value
     return VUnit

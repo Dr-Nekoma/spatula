@@ -92,6 +92,8 @@ instance Eq AbstractionInfo where
            in typeSubstitution ident1 (TVariable newLabel) type1 == typeSubstitution ident2 (TVariable newLabel) type2
     else False
 
+-- TODO Test if you can pass the type of the list to something
+-- When type aliases are added we should include type alias for list that returns the List|T| type
 data TListInfo = TListInfo (Maybe Type)
   deriving (Generic)
 
@@ -208,7 +210,7 @@ instance Arbitrary Operator where
 
 data Declaration
     = DeclExpr Expression
-    | DeclFun Text (Maybe Type) Expression
+    | DeclDef Text Expression
     deriving (Generic, Eq)
 
 instance Arbitrary Declaration where
@@ -216,8 +218,7 @@ instance Arbitrary Declaration where
 
 instance Show Declaration where
   show (DeclExpr expr) = "Expression: " ++ show expr
-  show (DeclFun name Nothing expr) = "Function " ++ unpack name ++ " = " ++ show expr
-  show (DeclFun name (Just t) expr) = "Function " ++ unpack name ++ " : " ++ show t ++ " = " ++ show expr
+  show (DeclDef name expr) = "Declaration: " ++ unpack name ++ " = " ++ show expr
 
 data Expression
     = ELiteral Literal

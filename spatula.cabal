@@ -33,6 +33,7 @@ library
       Parser.Kinds
       Parser.Types
       Parser.Utilities
+      Repl
       SWPrelude
       Typer
       Types
@@ -48,6 +49,7 @@ library
     , bytestring
     , containers
     , envparse
+    , extra
     , haskeline >=0.8.2
     , hspec
     , mtl
@@ -74,6 +76,7 @@ executable spatula-exe
     , bytestring
     , containers
     , envparse
+    , extra
     , haskeline >=0.8.2
     , hspec
     , mtl
@@ -103,6 +106,7 @@ test-suite spatula-test
     , bytestring
     , containers
     , envparse
+    , extra
     , haskeline >=0.8.2
     , hspec
     , mtl

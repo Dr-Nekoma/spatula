@@ -36,6 +36,7 @@ dependencies:
 - quickcheck-text
 - haskeline >= 0.8.2 
 - random
+- extra
 
 ghc-options:
 - -Wall

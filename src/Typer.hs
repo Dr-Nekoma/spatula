@@ -1,12 +1,13 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
-module Typer ( typeCheck ) where
+module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..) ) where
 
 import Types
     ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString, TList),
       TListInfo(..),
       TVariableInfo(..),
       Kind(..),
+      Declaration(..),
       Expression(..),
       LetSort(..),
       Literal(LBool, LUnit, LInteger, LRational, LString),
@@ -19,6 +20,7 @@ import Text.Printf ( printf )
 import Utils ( ResultT, throwError' )
 import Data.Traversable
 import qualified Data.Map as Map
+import Control.Monad ( foldM )
 import SWPrelude
 
 data TyperEnv = TyperEnv
@@ -26,16 +28,25 @@ data TyperEnv = TyperEnv
   , kindContext :: Map.Map TVariableInfo Kind
   } deriving (Eq, Show)
 
-typeCheckWithEnvironment :: TyperEnv -> Expression -> ResultT Type
-typeCheckWithEnvironment env (EList list) = do
+-- TODO: We should have warnings if expressions are returning something other than unit
+typeCheckDeclarations :: TyperEnv -> [Declaration] -> ResultT TyperEnv
+typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declaration found to type check"
+typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
+  where fun acc (DeclExpr expr) = typeCheckExpression acc expr >> return acc
+        fun acc@TyperEnv{..} (DeclDef name expr) =
+          do type' <- typeCheckExpression acc expr
+             return $ acc { variableTypes = Map.insert name type' variableTypes}
+
+typeCheckExpression :: TyperEnv -> Expression -> ResultT Type
+typeCheckExpression env (EList list) = do
   let allSameType type' = all (== type')
-  listTypes <- for list (fmap reduceType . typeCheckWithEnvironment env)
+  listTypes <- for list (fmap reduceType . typeCheckExpression env)
   case listTypes of
     [] -> pure $ (TList . TListInfo) Nothing 
     (x:xs) | allSameType x xs -> pure $ (TList . TListInfo) (Just x)
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
 
-typeCheckWithEnvironment _ (ELiteral literal) =
+typeCheckExpression _ (ELiteral literal) =
   case literal of
     LUnit -> pure TUnit
     LInteger _ -> pure TInteger
@@ -43,30 +54,30 @@ typeCheckWithEnvironment _ (ELiteral literal) =
     LBool _ -> pure TBool
     LString _ -> pure TString
 
-typeCheckWithEnvironment TyperEnv{..} (EVariable label) =
+typeCheckExpression TyperEnv{..} (EVariable label) =
   case Map.lookup label variableTypes of
     Nothing -> throwError' $ printf "TYPE ERROR: Unbound variable %s in the environment." label
     Just type' -> pure type'
 
-typeCheckWithEnvironment env@TyperEnv{..} (ELet In bindings body) = do
+typeCheckExpression env@TyperEnv{..} (ELet In bindings body) = do
   let (labels, expressions) = unzip bindings
-  typedExpressions <- for expressions (typeCheckWithEnvironment env)
+  typedExpressions <- for expressions (typeCheckExpression env)
   let newEnv = foldl f variableTypes (zip labels typedExpressions)
       f acc (label, type') = Map.insert label type' acc
-  typeCheckWithEnvironment (env {variableTypes = newEnv}) body
+  typeCheckExpression (env {variableTypes = newEnv}) body
 
-typeCheckWithEnvironment env (ELet Plus [] body) = typeCheckWithEnvironment env body
-typeCheckWithEnvironment env@TyperEnv{..} (ELet Plus ((label, expr):xs) body) = do
-  typedExpression <- typeCheckWithEnvironment env expr
-  typeCheckWithEnvironment (env { variableTypes = Map.insert label typedExpression variableTypes}) (ELet Plus xs body)
+typeCheckExpression env (ELet Plus [] body) = typeCheckExpression env body
+typeCheckExpression env@TyperEnv{..} (ELet Plus ((label, expr):xs) body) = do
+  typedExpression <- typeCheckExpression env expr
+  typeCheckExpression (env { variableTypes = Map.insert label typedExpression variableTypes}) (ELet Plus xs body)
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
-typeCheckWithEnvironment env@TyperEnv{..} (EAbstraction label type' returnType expression) = do
+typeCheckExpression env@TyperEnv{..} (EAbstraction label type' returnType expression) = do
   parameterKind <- kindCheckWithEnvironment env type'
   case parameterKind of 
     StarK -> do 
       let newEnv = env { variableTypes = Map.insert label type' variableTypes }
-      resultType <- typeCheckWithEnvironment newEnv expression
+      resultType <- typeCheckExpression newEnv expression
       case returnType of
         Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment env rt
                       case annotatedReturnKind of
@@ -79,24 +90,24 @@ typeCheckWithEnvironment env@TyperEnv{..} (EAbstraction label type' returnType e
         Nothing -> pure $ TArrow type' resultType
     other -> throwError' $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
 
-typeCheckWithEnvironment env (EApplication fun arg) = do
-  reducedFunType <- reduceType <$> typeCheckWithEnvironment env fun
+typeCheckExpression env (EApplication fun arg) = do
+  reducedFunType <- reduceType <$> typeCheckExpression env fun
   case reducedFunType of
     TArrow parameterType resultType -> do
-      reducedArgType <- reduceType <$> typeCheckWithEnvironment env arg
+      reducedArgType <- reduceType <$> typeCheckExpression env arg
       let reducedParameterType = reduceType parameterType
       if reducedArgType == reducedParameterType
         then pure resultType
       else throwError' $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
     _ -> throwError' $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (show reducedFunType)
 
-typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
-  condType <- typeCheckWithEnvironment env cond
+typeCheckExpression env (ECondition cond thenBranch elseBranch) = do
+  condType <- typeCheckExpression env cond
   let reducedCondType = reduceType condType
   case reducedCondType of
     TBool -> do
-      thenBranchType <- typeCheckWithEnvironment env thenBranch
-      elseBranchType <- typeCheckWithEnvironment env elseBranch
+      thenBranchType <- typeCheckExpression env thenBranch
+      elseBranchType <- typeCheckExpression env elseBranch
       let reducedThenType = reduceType thenBranchType
           reducedElseType = reduceType elseBranchType
       if reducedThenType == reducedElseType
@@ -105,9 +116,9 @@ typeCheckWithEnvironment env (ECondition cond thenBranch elseBranch) = do
     _ -> throwError' $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show condType)
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
-typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnType body) = do
+typeCheckExpression env@TyperEnv{..} (ETypeAbstraction label kind returnType body) = do
   let newKindEnv = env { kindContext = Map.insert label kind kindContext }
-  resultType <- typeCheckWithEnvironment newKindEnv body
+  resultType <- typeCheckExpression newKindEnv body
   case returnType of
     Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment newKindEnv rt
                   case annotatedReturnKind of
@@ -119,8 +130,8 @@ typeCheckWithEnvironment env@TyperEnv{..} (ETypeAbstraction label kind returnTyp
                     other -> throwError' $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
     Nothing -> pure $ TForall $ AbstractionInfo label kind resultType
 
-typeCheckWithEnvironment env (ETypeApplication expr type') = do
-  reducedFunctionType <- reduceType <$> typeCheckWithEnvironment env expr
+typeCheckExpression env (ETypeApplication expr type') = do
+  reducedFunctionType <- reduceType <$> typeCheckExpression env expr
   case reducedFunctionType of
     TForall (AbstractionInfo identifier kind bodyType) -> do
      expectedKind <- kindCheckWithEnvironment env type'
@@ -129,11 +140,11 @@ typeCheckWithEnvironment env (ETypeApplication expr type') = do
        else throwError' $ printf "KIND ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
     _ -> throwError' $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
     
-typeCheckWithEnvironment _ (EOperation _ []) = throwError' "TYPE ERROR: Operators don't type check with no elements"
+typeCheckExpression _ (EOperation _ []) = throwError' "TYPE ERROR: Operators don't type check with no elements"
 
 -- TODO: Check properly the arithmetic operators with the exhaustiveness -> THIS IS A TRAP
-typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
-  operandsTypes <- for list (fmap reduceType . typeCheckWithEnvironment env)
+typeCheckExpression env (EOperation operator list@(_:_)) = do
+  operandsTypes <- for list (fmap reduceType . typeCheckExpression env)
   let checkIfAll type' = all (== type')
       x = head operandsTypes
       xs = tail operandsTypes
@@ -165,9 +176,6 @@ typeCheckWithEnvironment env (EOperation operator list@(_:_)) = do
       | checkIfAll TRational operandsTypes -> pure $ if operator == OpLessThan then TBool else TRational
       | checkIfAll TInteger operandsTypes  -> pure $ if operator == OpLessThan then TBool else TInteger
       | otherwise -> throwError' $ printf "TYPE ERROR: Arithmetic operator %s must use only numbers of the same sort." (show arithmetics)
-      
-typeCheck :: Expression -> ResultT Type
-typeCheck = typeCheckWithEnvironment (TyperEnv typerPrelude Map.empty)
 
 kindCheckWithEnvironment :: TyperEnv -> Type -> ResultT Kind
 kindCheckWithEnvironment env@TyperEnv{..} type' =

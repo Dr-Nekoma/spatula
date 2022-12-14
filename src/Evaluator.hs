@@ -1,12 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Evaluator ( eval, Value(..), NativeFunction(..) ) where
+module Evaluator ( evalDeclarations, eval, Value(..), NativeFunction(..), EvalEnv, evalExpression ) where
 
-import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..) )
+import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..), Declaration(..) )
 import qualified Data.Map as Map
 import Data.Text ( unpack, Text )
 import Utils ( ResultT, throwError' )
 import Text.Printf ( printf )
 import Data.Traversable
+import Control.Monad ( foldM )
 
 type EvalEnv = Map.Map Text Value
 
@@ -32,91 +33,99 @@ instance Show Value where
   show (VClosure {}) = "<fun>"
   show (VNativeFunction _) = "<builtin>"
 
-evalWithEnvironment :: EvalEnv -> Expression -> ResultT Value
+evalDeclarations :: EvalEnv -> [Declaration] -> ResultT EvalEnv
+evalDeclarations _ [] = throwError' "DECLARATION ERROR: No declaration found to evaluate "
+evalDeclarations env list = foldM fun env list
+  where fun acc (DeclExpr expr) = evalExpression acc expr >> return acc
+        fun acc (DeclDef name expr) =
+          do value <- evalExpression acc expr
+             return $ Map.insert name value acc
 
-evalWithEnvironment env (EList list) = do
-  evaluatedElems <- for list (evalWithEnvironment env)
+evalExpression :: EvalEnv -> Expression -> ResultT Value
+
+evalExpression env (EList list) = do
+  evaluatedElems <- for list (evalExpression env)
   pure $ VList evaluatedElems
 
-evalWithEnvironment _ (ELiteral literal) = pure $ VLiteral literal
+evalExpression _ (ELiteral literal) = pure $ VLiteral literal
 
-evalWithEnvironment env (EVariable label) =
+evalExpression env (EVariable label) =
   case Map.lookup label env of
     Nothing -> throwError' $ printf "ERROR: Unbound variable %s in the environment." (unpack label)
     Just var -> return var
 
-evalWithEnvironment env (EAbstraction label _ _ body) =
+evalExpression env (EAbstraction label _ _ body) =
   pure $ VClosure label body env
 
-evalWithEnvironment env (EApplication fun arg) = do
-  funValue <- evalWithEnvironment env fun
-  argValue <- evalWithEnvironment env arg
+evalExpression env (EApplication fun arg) = do
+  funValue <- evalExpression env fun
+  argValue <- evalExpression env arg
   case funValue of
     VClosure label body closedEnv ->
       let newEnv = Map.insert label argValue closedEnv in
-        evalWithEnvironment newEnv body
+        evalExpression newEnv body
     VNativeFunction (NativeFunction natFun) ->
       natFun argValue
     other -> throwError' $ printf "ERROR: Attempted to apply value %s to %s that it is not a function." (show argValue) (show other)
 
-evalWithEnvironment env (ECondition cond thenBranch elseBranch) = do
-  test <- evalWithEnvironment env cond
+evalExpression env (ECondition cond thenBranch elseBranch) = do
+  test <- evalExpression env cond
   case test of
     VLiteral (LBool b) ->
       if b then
-        evalWithEnvironment env thenBranch
+        evalExpression env thenBranch
       else
-        evalWithEnvironment env elseBranch
+        evalExpression env elseBranch
     cond' -> throwError' $ printf "ERROR: The condition %s is not a bool." (show cond')
 
-evalWithEnvironment env (ELet In bindings body) = do
+evalExpression env (ELet In bindings body) = do
   let (labels, expressions) = unzip bindings
-  evaluatedExpressions <- for expressions (evalWithEnvironment env)
+  evaluatedExpressions <- for expressions (evalExpression env)
   let newEnv = foldl f env (zip labels evaluatedExpressions)
       f acc (label, expression) = Map.insert label expression acc
-  evalWithEnvironment newEnv body
+  evalExpression newEnv body
 
-evalWithEnvironment env (ELet Plus [] body) = evalWithEnvironment env body
-evalWithEnvironment env (ELet Plus ((label, expr):xs) body) = do
-  evaluatedExpression <- evalWithEnvironment env expr
-  evalWithEnvironment (Map.insert label evaluatedExpression env) (ELet Plus xs body)
+evalExpression env (ELet Plus [] body) = evalExpression env body
+evalExpression env (ELet Plus ((label, expr):xs) body) = do
+  evaluatedExpression <- evalExpression env expr
+  evalExpression (Map.insert label evaluatedExpression env) (ELet Plus xs body)
 
-evalWithEnvironment _ (EOperation OpAnd []) = return $ VLiteral (LBool True)
-evalWithEnvironment env (EOperation OpAnd (x:xs)) = do
-  operand <- evalWithEnvironment env x
+evalExpression _ (EOperation OpAnd []) = return $ VLiteral (LBool True)
+evalExpression env (EOperation OpAnd (x:xs)) = do
+  operand <- evalExpression env x
   case operand of
     VLiteral (LBool False) -> return $ VLiteral (LBool False)
-    VLiteral (LBool True) -> evalWithEnvironment env (EOperation OpAnd xs)
+    VLiteral (LBool True) -> evalExpression env (EOperation OpAnd xs)
     _ -> throwError' "This should never happen"
 
--- TODO: Instead of relying on recursive calls of evalWithEnvironment, let's make an internal function and do the recursion there
-evalWithEnvironment _ (EOperation OpOr []) = return $ VLiteral (LBool False)
-evalWithEnvironment env (EOperation OpOr (x:xs)) = do
-  operand <- evalWithEnvironment env x
+-- TODO: Instead of relying on recursive calls of evalExpression, let's make an internal function and do the recursion there
+evalExpression _ (EOperation OpOr []) = return $ VLiteral (LBool False)
+evalExpression env (EOperation OpOr (x:xs)) = do
+  operand <- evalExpression env x
   case operand of
     VLiteral (LBool True) -> return $ VLiteral (LBool True)
-    VLiteral (LBool False) -> evalWithEnvironment env (EOperation OpOr xs)
+    VLiteral (LBool False) -> evalExpression env (EOperation OpOr xs)
     _ -> throwError' "This should never happen"
 
-evalWithEnvironment _ (EOperation OpEqual []) = return $ VLiteral (LBool True)
-evalWithEnvironment env (EOperation OpEqual (x:xs:rest)) = do
-  operand1 <- evalWithEnvironment env x
-  operand2 <- evalWithEnvironment env xs
+evalExpression _ (EOperation OpEqual []) = return $ VLiteral (LBool True)
+evalExpression env (EOperation OpEqual (x:xs:rest)) = do
+  operand1 <- evalExpression env x
+  operand2 <- evalExpression env xs
   if operand1 == operand2
-  then evalWithEnvironment env (EOperation OpEqual rest)
+  then evalExpression env (EOperation OpEqual rest)
   else return $ VLiteral (LBool False)
 
-evalWithEnvironment env (EOperation operator list@(_:_:_)) = do
-  (x:xs) <- for list (evalWithEnvironment env)
+evalExpression env (EOperation operator list@(_:_:_)) = do
+  (x:xs) <- for list (evalExpression env)
   return $ foldl (operatorFunction operator) x xs
 
-evalWithEnvironment _ (EOperation _ _) = throwError' "Open an issue about this: Operators are broken during evaluation"
+evalExpression _ (EOperation _ _) = throwError' "Open an issue about this: Operators are broken during evaluation"
 
-evalWithEnvironment env (ETypeAbstraction _ _ _ body) =
-  evalWithEnvironment env body
+evalExpression env (ETypeAbstraction _ _ _ body) =
+  evalExpression env body
 
-evalWithEnvironment env (ETypeApplication expr _) =
-  evalWithEnvironment env expr
+evalExpression env (ETypeApplication expr _) =
+  evalExpression env expr
 
 operatorFunction :: Operator -> Value -> Value -> Value
 operatorFunction OpConcat (VList left) (VList right) = VList $ left ++ right
@@ -133,4 +142,4 @@ operatorFunction OpMinus (VLiteral (LRational element)) (VLiteral (LRational acc
 operatorFunction op element acc = error $ printf "Error in fold of %s with element %s and accumulator %s" (show op) (show element) (show acc)
 
 eval :: EvalEnv -> Expression -> ResultT Value
-eval = evalWithEnvironment
+eval = evalExpression

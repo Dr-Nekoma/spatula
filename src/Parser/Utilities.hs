@@ -13,7 +13,7 @@ module Parser.Utilities
   )
 where
  
-import Text.Parsec ( satisfy, many1, parserFail, Parsec, many, between, char, string, spaces, try, choice)
+import Text.Parsec ( satisfy, many1, parserFail, Parsec, many, between, char, string, spaces, try, choice, manyTill)
 import Data.Set ( Set, fromList, member )
 import Data.Text ( Text, pack )
 import Data.Char ( isAlphaNum, isSymbol, isAscii )
