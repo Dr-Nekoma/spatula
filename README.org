@@ -3,5 +3,14 @@
 * Grammar
   [[file:docs/grammar.org][Document with Silverware+'s grammar]]
   
+* Development
 
+** Nix
 
+#+BEGIN_SRC shell
+  nix build
+#+END_SRC
+
+#+BEGIN_SRC shell
+  nix develop
+#+END_SRC
