@@ -210,7 +210,8 @@ instance Arbitrary Operator where
 
 data Declaration
     = DeclExpr Expression
-    | DeclDef Text Expression
+    | DeclFun Text Type Expression
+    | DeclVal Text Expression
     deriving (Generic, Eq)
 
 instance Arbitrary Declaration where
@@ -218,7 +219,8 @@ instance Arbitrary Declaration where
 
 instance Show Declaration where
   show (DeclExpr expr) = "Expression: " ++ show expr
-  show (DeclDef name expr) = "Declaration: " ++ unpack name ++ " = " ++ show expr
+  show (DeclFun name type' expr) = "Function: " ++ unpack name ++ " : " ++ show type' ++ " = " ++ show expr
+  show (DeclVal name literal) = "Value: " ++ unpack name ++ " = " ++ show literal
 
 data Expression
     = ELiteral Literal

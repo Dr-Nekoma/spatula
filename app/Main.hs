@@ -36,23 +36,23 @@ fullExecution content = do
 main :: IO ()
 main = do
   CommandOptions{..} <- parseArgs
-  repl
---   if justRepl
---   then repl
---   else
---     case file of
---       Nothing -> fail "Silverware+ file was not provided"
---       Just f -> do
---         if invalidInputFile f
---         then fail "Silverware+ file does not terminate with .sw"
---         else do
---           content <- readFile f
---           if not (justParse || justTypeCheck || justEvaluate) then fullExecution content
---           else do
---             let parsed = parse expressionP "" content
---             when justParse (either (const $ pure ()) (\x -> printMessage (Right x :: Either ParseError Expression)) parsed)
---             case parsed of
---               Left errorParse -> printMessage (Left errorParse :: Either ParseError Expression)
---               Right ast -> return ()
--- --                when justTypeCheck (runExceptT (typeCheck ast) >>= printMessage)
--- --                when justEvaluate (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (eval evaluatorPrelude ast) >>= printMessage)
+  if justRepl
+  then repl
+  else
+    case file of
+      Nothing -> fail "Silverware+ file was not provided"
+      Just f -> do
+        if invalidInputFile f
+        then fail "Silverware+ file does not terminate with .sw"
+        else do
+          content <- readFile f
+          fullExecution content
+          -- if not (justParse || justTypeCheck || justEvaluate) then fullExecution content
+          -- else do
+          --   let parsed = parse expressionP "" content
+          --   when justParse (either (const $ pure ()) (\x -> printMessage (Right x :: Either ParseError Expression)) parsed)
+          --   case parsed of
+          --     Left errorParse -> printMessage (Left errorParse :: Either ParseError Expression)
+          --     Right ast -> return ()
+--                when justTypeCheck (runExceptT (typeCheck ast) >>= printMessage)
+--                when justEvaluate (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (eval evaluatorPrelude ast) >>= printMessage)

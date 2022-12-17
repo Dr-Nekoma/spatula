@@ -33,9 +33,19 @@ typeCheckDeclarations :: TyperEnv -> [Declaration] -> ResultT TyperEnv
 typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declaration found to type check"
 typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
   where fun acc (DeclExpr expr) = typeCheckExpression acc expr >> return acc
-        fun acc@TyperEnv{..} (DeclDef name expr) =
-          do type' <- typeCheckExpression acc expr
+        fun acc@TyperEnv{..} (DeclVal name value) =
+          do type' <- typeCheckExpression acc value
              return $ acc { variableTypes = Map.insert name type' variableTypes}
+        fun acc@TyperEnv{..} (DeclFun name expectedType expr) =
+          do kind <- kindCheckWithEnvironment acc expectedType
+             case kind of
+               StarK -> do
+                let newEnv = acc { variableTypes = Map.insert name expectedType variableTypes}
+                type' <- typeCheckExpression newEnv expr      
+                if reduceType type' == reduceType expectedType
+                then return newEnv
+                else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show expectedType) (show type')
+               other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show expectedType) (show other)
 
 typeCheckExpression :: TyperEnv -> Expression -> ResultT Type
 typeCheckExpression env (EList list) = do
@@ -171,7 +181,7 @@ typeCheckExpression env (EOperation operator list@(_:_)) = do
     OpEqual -> do
       case find (/= x) xs of
         Just firstDifferent -> throwError' $ printf "TYPE ERROR: Mismatch between elements at an equality comparison. Expected '%s' but got '%s'" (show x) (show firstDifferent)
-        Nothing -> pure x
+        Nothing -> pure TBool
     arithmetics -- Arithmetic
       | checkIfAll TRational operandsTypes -> pure $ if operator == OpLessThan then TBool else TRational
       | checkIfAll TInteger operandsTypes  -> pure $ if operator == OpLessThan then TBool else TInteger

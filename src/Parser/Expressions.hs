@@ -2,11 +2,6 @@
 module Parser.Expressions where
 
 import Types
-    ( Expression(EAbstraction, ELiteral, EVariable, ECondition, EApplication, ETypeAbstraction, ETypeApplication, ELet, EOperation, EList), 
-      LetSort(..),
-      Literal(..),
-      TVariableInfo(..),
-      Operator(..))
 import Parser.Utilities --( ParserT, variableGeneric, typeVariableGeneric, openDelimiter, closeDelimiter )
 import Parser.Types
 import Parser.Kinds

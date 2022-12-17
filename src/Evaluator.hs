@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Evaluator ( evalDeclarations, eval, Value(..), NativeFunction(..), EvalEnv, evalExpression ) where
 
-import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..), Declaration(..) )
+import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..), Declaration(..), Type(..))
 import qualified Data.Map as Map
 import Data.Text ( unpack, Text )
 import Utils ( ResultT, throwError' )
@@ -33,13 +33,36 @@ instance Show Value where
   show (VClosure {}) = "<fun>"
   show (VNativeFunction _) = "<builtin>"
 
+-- https://en.wikipedia.org/wiki/Fixed-point_combinator#Strict_fixed-point_combinator
+internalZ :: Expression
+internalZ = EAbstraction 
+              "x"
+              TUnit 
+              Nothing 
+              (EApplication 
+                (EVariable "f") 
+                (EAbstraction 
+                  "v" 
+                  TUnit
+                  Nothing
+                  (EApplication
+                    (EApplication
+                      (EVariable "x")
+                      (EVariable "x"))
+                    (EVariable "v"))))
+
 evalDeclarations :: EvalEnv -> [Declaration] -> ResultT EvalEnv
 evalDeclarations _ [] = throwError' "DECLARATION ERROR: No declaration found to evaluate "
 evalDeclarations env list = foldM fun env list
   where fun acc (DeclExpr expr) = evalExpression acc expr >> return acc
-        fun acc (DeclDef name expr) =
-          do value <- evalExpression acc expr
+        fun acc (DeclVal name value) =
+          do value <- evalExpression acc value
              return $ Map.insert name value acc
+        fun acc (DeclFun name t expr) = do
+          let zCombinator = EAbstraction "f" t Nothing (EApplication internalZ internalZ)
+              newExpr = EApplication zCombinator (EAbstraction name t Nothing expr)
+          value <- evalExpression acc newExpr
+          return $ Map.insert name value acc
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
 

@@ -86,7 +86,8 @@
 * Value Declarations
 
 #+begin_src lisp
-[deflet x 123]
+[define x 123]
+[my x 123]
 #+end_src
 
 * Function Declarations

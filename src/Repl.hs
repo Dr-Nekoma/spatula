@@ -99,7 +99,7 @@ singleExecution content = do
                  Right _ -> do
                    result <- liftRepl . runExceptT $ evalExpression evalEnv expr
                    replMessage result
-          DeclDef name body -> addDeclaration name body
+          DeclFun name _ body -> addDeclaration name body
 
 getType :: String -> ReplT ()
 getType content = do
@@ -119,7 +119,7 @@ importFile path = do
      for_ decls
         (\case
           DeclExpr _ -> return ()
-          DeclDef name body -> addDeclaration name body)
+          DeclFun name _ body -> addDeclaration name body)
 
 getParsed :: String -> ReplT ()
 getParsed content = replMessage $ parse declarationP "" content

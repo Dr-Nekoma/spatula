@@ -12,7 +12,14 @@ fileP :: ParserT st [Declaration]
 fileP = many (spaces *> declarationP <* spaces) <* eof
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [DeclExpr <$> expressionP, defunP]
+declarationP = choice $ fmap try [DeclExpr <$> expressionP, defunP, defvalP]
+
+defvalP :: ParserT st Declaration
+defvalP = do
+  openDelimiter *> spaces *> string "define" <* spaces
+  name <- variableGeneric <* spaces
+  value <- expressionP <* spaces <* closeDelimiter <* spaces
+  pure $ DeclVal name value
 
 defunP :: ParserT st Declaration
 defunP = do
@@ -20,8 +27,9 @@ defunP = do
   openDelimiter *> spaces *> string "defun" <* spaces
   name <- variableGeneric <* spaces
   args <- openDelimiter *> many1 (spaces *> couples) <* closeDelimiter <* spaces
-  (returnType, body) <- (,) <$> (spaces *> optionMaybe (spaces *> char ':' *> spaces *> typeP <* spaces)) <*> expressionP <* closeDelimiter
+  (returnType, body) <- (,) <$> (spaces *> char ':' *> spaces *> typeP <* spaces) <*> expressionP <* closeDelimiter <* spaces
   let fun = ($ Nothing) . uncurry EAbstraction
-      first = (\(lastText, lastType) -> EAbstraction lastText lastType returnType body) $ Prelude.last args
+      first = (\(lastText, lastType) -> EAbstraction lastText lastType (Just returnType) body) $ Prelude.last args
       funBody = Prelude.foldr fun first (Prelude.init args)
-  pure $ DeclDef name funBody
+      (_, types) = unzip args
+  pure $ DeclFun name (curriedArrow types returnType) funBody

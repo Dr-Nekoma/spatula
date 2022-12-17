@@ -10,6 +10,7 @@ module Parser.Utilities
   , listP
   , openDelimiter
   , closeDelimiter
+  , curriedArrow
   )
 where
  
