@@ -1,0 +1,50 @@
+name: "Nix"
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Nix Build
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v18
+      with:
+        extra_nix_config: |
+          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+    - name: Nix Build
+      run: |
+        nix build
+    - run: echo "UPLOAD_PATH=$(readlink -f result)" >> $GITHUB_ENV
+    - name: Cache Binary
+      id: cache-bin
+      uses: actions/cache@v3
+      with:
+        path: "${{ env.UPLOAD_PATH }}/bin/spatula-exe"
+        key: spatula-exe
+
+  test-bin:
+    runs-on: ubuntu-latest
+    name: Spatula / ${{ matrix.example }}
+    needs: [build]
+    strategy:
+      matrix:
+        # Run the following to re-generate this list
+        # ls -L1 examples/*.sw | sed 's!.*/!!' | sort | tr '\n' ", " | sed 's/\.sw//g' | sed 's/.$//'
+        example: [ADT,Alias,Comment,Factorial,Filter,Fold,Forall,Functions,Funs,Fun,IO,List,Map,Multiple,Print,Progn,Read,Record,Sum]
+        excluded:
+          # Add any examples that are not fully supported here
+          - example: ADT
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/cache@v3
+      with:
+        path: "${{ env.UPLOAD_PATH }}/bin/spatula-exe"
+        key: spatula-exe
+    - name: Run binaries
+      run: |
+        ./spatula-exe -f ./examples/${{ matrix.example }}.sw

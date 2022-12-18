@@ -1,71 +1,84 @@
-#+TITLE: Design of Silverware+'s Grammar
-
 * Meta-Language
 
-  -  +  => One or more
-  -  *  => Zero or more
-  -  ?  => Zero or one 
-  -  |  => Or logical operator
-  -  _  => And logical operator
-  -  =  => Mapping
-  - [ ] => Grouping
-  - "x" => String literal 
+#+BEGIN_SRC text
+   +  => One or more
+   *  => Zero or more
+   ?  => Zero or one
+   |  => Or logical operator
+   _  => And logical operator
+   =  => Mapping
+  [ ] => Grouping
+  "x" => String literal
+#+END_SRC
     
 * Grammar
-
 ** Basic Units
-  - Boolean = "T" | "F"
-  - Left-Delimiter = "["
-  - Right-Delimiter =  "]"
-  - Identifier = String
-  - Type-Left-Delimiter = "("
-  - Type-Right-Delimiter = ")"  
-  - Type-Atom = "Integer" | "Bool" | "Rational" | "Unit"
-  - WhiteSpace = " " | "\n" | "\t" | "\r\t" | "\r\n" | "\c"
-  - Operator = "+" | "-" | "*" | "/"
+#+BEGIN_SRC 
+  Boolean              = "T" | "F"
+  Left-Delimiter       = "["
+  Right-Delimiter      =  "]"
+  Identifier           = String
+  Type-Left-Delimiter  = "("
+  Type-Right-Delimiter = ")"  
+  Type-Atom            = "Integer" | "Bool" | "Rational" | "Unit"
+  WhiteSpace           = " " | "\n" | "\t" | "\r\t" | "\r\n" | "\c"
+  Operator             = "+" | "-" | "*" | "/"
+#+END_SRC
 
 ** General
 
-  - File = WhiteSpace* [Declaration WhiteSpace*]* EOF
-  - Declaration = Expression | Type-Declaration | Value-Declaration | Function-Declaration
+#+BEGIN_SRC 
+  File        = WhiteSpace* [Declaration WhiteSpace*]* EOF
+  Declaration = Expression | Type-Declaration | Value-Declaration | Function-Declaration
+#+END_SRC
 
 ** Type-Declaration
 
-  - Type-Declaration = ADT | Records
+#+BEGIN_SRC 
+  Type-Declaration = ADT | Records
+#+END_SRC
 
 ** Expression
 
-  - Expression =  Literal | Universal-Application | Universal-Abstraction | Variable | Condition
-  - Literal = Integer | Boolean
-  - Universal-Application = Application (Expression | "<" WhiteSpace* Type WhiteSpace* ">")
-  - Universal-Abstraction = Abstraction (Parameters (Type | Kind))
-  - Variable = Identifier
-  - Condition = Enclosed-Expression ("if" WhiteSpace+ Expression WhiteSpace+ Expression WhiteSpace+ Expression)
-  - Operation = Enclosed-Expression (Operator WhiteSpace* Expression+)
+#+BEGIN_SRC 
+  Expression            = Literal | Universal-Application | Universal-Abstraction | Variable | Condition
+  Literal               = Integer | Boolean
+  Universal-Application = Application (Expression | "<" WhiteSpace* Type WhiteSpace* ">")
+  Universal-Abstraction = Abstraction (Parameters (Type | Kind))
+  Variable              = Identifier
+  Condition             = Enclosed-Expression ("if" WhiteSpace+ Expression WhiteSpace+ Expression WhiteSpace+ Expression)
+  Operation             = Enclosed-Expression (Operator WhiteSpace* Expression+)
+#+END_SRC
 
 ** Type
 
-  - Type = Type-Atom | Type-Arrow | Type-Variable | Type-Forall | Type-Abstraction | Type-Application
-  - Type-Arrow = ArrowList Type
-  - Type-Variable = '!' Identifier
-  - Type-Forall = Enclosed-Type ("forall" WhiteSpace+ Type-Variable WhiteSpace* "." WhiteSpace* Kind WhiteSpace* ";" WhiteSpace* Type)
+#+BEGIN_SRC 
+  Type          = Type-Atom | Type-Arrow | Type-Variable | Type-Forall | Type-Abstraction | Type-Application
+  Type-Arrow    = ArrowList Type
+  Type-Variable = '!' Identifier
+  Type-Forall   = Enclosed-Type ("forall" WhiteSpace+ Type-Variable WhiteSpace* "." WhiteSpace* Kind WhiteSpace* ";" WhiteSpace* Type)
+#+END_SRC
 
 ** Encloses
 
-  - Enclosed-Expression a = Left-Delimiter WhiteSpace* a WhiteSpace* Right-Delimiter 
-  - Enclosed-Parameter a = Type-Left-Delimiter WhiteSpace* a WhiteSpace* Type-Right-Delimiter 
-  - Application a = Enclosed-Expression (Expression [WhiteSpace+ a]*)
-  - Abstraction a = Enclosed-Expression ("lambda" WhiteSpace+ a [WhiteSpace+ Expression]+)
-  - Parameters a = Enclosed-Expression ([(Parameter a) WhiteSpace*]+)
-  - Parameter a = Enclosed-Parameter (Identifier WhiteSpace+ a)
-  - ArrowList a = Type-Left-Delimiter WhiteSpace* "->" WhiteSpace* (List a) WhiteSpaces* a WhiteSpace* Type-Right-Delimiter
-  - List a = Type-Left-Delimiter [WhiteSpace* a]+ WhiteSpace* Type-Right-Delimiter
+#+BEGIN_SRC 
+  Enclosed-Expression a = Left-Delimiter WhiteSpace* a WhiteSpace* Right-Delimiter 
+  Enclosed-Parameter a  = Type-Left-Delimiter WhiteSpace* a WhiteSpace* Type-Right-Delimiter 
+  Application a         = Enclosed-Expression (Expression [WhiteSpace+ a]*)
+  Abstraction a         = Enclosed-Expression ("lambda" WhiteSpace+ a [WhiteSpace+ Expression]+)
+  Parameters a          = Enclosed-Expression ([(Parameter a) WhiteSpace*]+)
+  Parameter a           = Enclosed-Parameter (Identifier WhiteSpace+ a)
+  ArrowList a           = Type-Left-Delimiter WhiteSpace* "->" WhiteSpace* (List a) WhiteSpaces* a WhiteSpace* Type-Right-Delimiter
+  List a                = Type-Left-Delimiter [WhiteSpace* a]+ WhiteSpace* Type-Right-Delimiter
+#+END_SRC
 
 ** Kinds
 
-  - Kind = Kind-Star | Kind-ArrowStar
-  - Kind-Star = "*"
-  - Kind-ArrowStar = ArrowList Kind
+#+BEGIN_SRC 
+  Kind           = Kind-Star | Kind-ArrowStar
+  Kind-Star      = "*"
+  Kind-ArrowStar = ArrowList Kind
+#+END_SRC
 
 * Aliases
 
