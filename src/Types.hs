@@ -12,7 +12,9 @@ module Types (
   LetSort(..),
   Operator(..),
   Expression(..),
-  Declaration(..)) where
+  Declaration(..),
+  Label,
+  Field) where
 
 import Data.Text.Arbitrary ( Text )
 import Data.Text ( unpack )
@@ -135,6 +137,7 @@ data Type
     | TBool
     | TString
     | TList TListInfo
+    | TAnonymusRecord [Type]
     | TArrow Type Type
     | TVariable TVariableInfo
     | TForall AbstractionInfo
@@ -222,6 +225,9 @@ instance Show Declaration where
   show (DeclFun name type' expr) = "Function: " ++ unpack name ++ " : " ++ show type' ++ " = " ++ show expr
   show (DeclVal name literal) = "Value: " ++ unpack name ++ " = " ++ show literal
 
+type Label = Text
+type Field = (Label, Expression)
+
 data Expression
     = ELiteral Literal
     | EVariable Text
@@ -233,6 +239,7 @@ data Expression
     | ETypeAbstraction TVariableInfo Kind (Maybe Type) Expression
     | ETypeApplication Expression Type
     | EList [Expression]
+    | EAnonymusRecord [Field]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Expression where

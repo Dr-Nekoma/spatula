@@ -3,7 +3,7 @@
 module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..) ) where
 
 import Types
-    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString, TList),
+    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString, TList, TAnonymusRecord),
       TListInfo(..),
       TVariableInfo(..),
       Kind(..),
@@ -20,7 +20,7 @@ import Text.Printf ( printf )
 import Utils ( ResultT, throwError' )
 import Data.Traversable
 import qualified Data.Map as Map
-import Control.Monad ( foldM )
+import Control.Monad
 import SWPrelude
 
 data TyperEnv = TyperEnv
@@ -47,6 +47,7 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
                 else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show expectedType) (show type')
                other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show expectedType) (show other)
 
+
 typeCheckExpression :: TyperEnv -> Expression -> ResultT Type
 typeCheckExpression env (EList list) = do
   let allSameType type' = all (== type')
@@ -55,6 +56,11 @@ typeCheckExpression env (EList list) = do
     [] -> pure $ (TList . TListInfo) Nothing 
     (x:xs) | allSameType x xs -> pure $ (TList . TListInfo) (Just x)
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
+
+typeCheckExpression env (EAnonymusRecord fields) = do
+  let exprs = map snd fields
+  types <- for exprs (fmap reduceType . typeCheckExpression env)
+  pure $ TAnonymusRecord types
 
 typeCheckExpression _ (ELiteral literal) =
   case literal of
@@ -195,6 +201,13 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TRational -> pure StarK
     TBool -> pure StarK
     TString -> pure StarK
+    TAnonymusRecord fields -> do
+      let ifStar StarK = True
+          ifStar _ = False
+      internalKinds <- for fields (kindCheckWithEnvironment env)
+      if all ifStar internalKinds
+      then pure StarK
+      else throwError' "Internal types of fields should have kind *."
     TList (TListInfo Nothing) -> pure StarK
     TList (TListInfo (Just x)) -> do
       internalKind <- kindCheckWithEnvironment env x

@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Evaluator ( evalDeclarations, eval, Value(..), NativeFunction(..), EvalEnv, evalExpression ) where
 
-import Types ( Expression(..), Literal(LBool, LInteger, LRational), LetSort(..), Operator(..), Declaration(..), Type(..))
+import Types
 import qualified Data.Map as Map
 import Data.Text ( unpack, Text )
 import Utils ( ResultT, throwError' )
@@ -22,6 +22,7 @@ data Value
     | VClosure Text Expression EvalEnv
     | VNativeFunction NativeFunction
     | VList [Value]
+    | VRecord [(Label, Value)]
     deriving Eq
 
 instance Show Value where
@@ -32,6 +33,8 @@ instance Show Value where
   show (VLiteral literal) = show literal
   show (VClosure {}) = "<fun>"
   show (VNativeFunction _) = "<builtin>"
+  show (VRecord []) = ""
+  show (VRecord ((label, value):xs)) = "Label: " ++ unpack label ++ " - Value: " ++ show value ++ "\n" ++ show (VRecord xs)
 
 -- https://en.wikipedia.org/wiki/Fixed-point_combinator#Strict_fixed-point_combinator
 internalZ :: Expression
@@ -65,6 +68,11 @@ evalDeclarations env list = foldM fun env list
           return $ Map.insert name value acc
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
+
+evalExpression env (EAnonymusRecord fields) = do
+  let (names, exprs) = unzip fields
+  values <- for exprs (evalExpression env)
+  pure . VRecord $ zip names values
 
 evalExpression env (EList list) = do
   evaluatedElems <- for list (evalExpression env)
