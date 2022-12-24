@@ -14,18 +14,20 @@ import Types
       Operator(..),
       typeSubstitution,
       AbstractionInfo(AbstractionInfo) )
-import Data.List ( find )
+import Data.List ( find, sortBy )
 import Data.Text (pack, Text)
 import Text.Printf ( printf )
 import Utils ( ResultT, throwError' )
 import Data.Traversable
 import qualified Data.Map as Map
 import Control.Monad
-import SWPrelude
+import SWPrelude()
+import Data.Bifunctor ( Bifunctor(second) )
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
   , kindContext :: Map.Map TVariableInfo Kind
+  , aliasContext :: Map.Map Text Type
   } deriving (Eq, Show)
 
 -- TODO: We should have warnings if expressions are returning something other than unit
@@ -36,6 +38,7 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
         fun acc@TyperEnv{..} (DeclVal name value) =
           do type' <- typeCheckExpression acc value
              return $ acc { variableTypes = Map.insert name type' variableTypes}
+        fun acc@TyperEnv{..} (DeclType name type') = undefined
         fun acc@TyperEnv{..} (DeclFun name expectedType expr) =
           do kind <- kindCheckWithEnvironment acc expectedType
              case kind of
@@ -58,10 +61,10 @@ typeCheckExpression env (EList list) = do
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
 
 typeCheckExpression env (EAnonymusRecord fields) = do
-  let exprs = map snd fields
-  types <- for exprs (fmap reduceType . typeCheckExpression env)
-  pure $ TAnonymusRecord types
-
+  let (labels, exprs) = unzip fields
+  types <- for exprs (typeCheckExpression env)
+  pure $ TAnonymusRecord (sortBy (\(label1, _) (label2, _) -> compare label1 label2) (zip labels types))
+  
 typeCheckExpression _ (ELiteral literal) =
   case literal of
     LUnit -> pure TUnit
@@ -204,7 +207,7 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TAnonymusRecord fields -> do
       let ifStar StarK = True
           ifStar _ = False
-      internalKinds <- for fields (kindCheckWithEnvironment env)
+      internalKinds <- for (map snd fields) (kindCheckWithEnvironment env)
       if all ifStar internalKinds
       then pure StarK
       else throwError' "Internal types of fields should have kind *."
@@ -250,6 +253,8 @@ reduceType type' =
     TRational -> TRational
     TBool -> TBool
     TString -> TString
+    TAnonymusRecord fields ->
+      TAnonymusRecord $ map (second reduceType) fields
     TList (TListInfo type'') -> TList . TListInfo $ fmap reduceType type''
     TArrow parameter returnType -> TArrow (reduceType parameter) (reduceType returnType)
     TVariable ident -> TVariable ident

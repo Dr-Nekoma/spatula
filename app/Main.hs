@@ -25,7 +25,7 @@ fullExecution content = do
   case parse fileP "" content of
     Left errorParse -> putStrLn . unpack $ buildError (errorParse :: ParseError)
     Right decls -> do
-        typeEnv' <- runExceptT $ typeCheckDeclarations (TyperEnv typerPrelude Map.empty) decls
+        typeEnv' <- runExceptT $ typeCheckDeclarations (TyperEnv typerPrelude Map.empty Map.empty) decls
         case typeEnv' of
          Left errorType -> TIO.putStrLn $ "\ESC[91m" <> errorType
          Right typeEnv -> do evalEnv' <- runExceptT $ evalDeclarations evaluatorPrelude decls

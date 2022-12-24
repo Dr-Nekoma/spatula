@@ -69,9 +69,9 @@ addDeclaration name body = do
   case typedValue of
     Left e -> replError e
     Right (t,v) -> do
-     (TyperEnv typerEnv _, evalEnv) <- get
+     (TyperEnv typerEnv _ _, evalEnv) <- get
      let newTyperEnv = Map.insert name t typerEnv
-     put (TyperEnv newTyperEnv Map.empty, Map.insert name v evalEnv)
+     put (TyperEnv newTyperEnv Map.empty Map.empty, Map.insert name v evalEnv)
 
 typeCheckEval :: Expression -> ReplT (Result (Type, Value))
 typeCheckEval expr = do
@@ -157,7 +157,7 @@ insertion = do
         _ -> error "This should be impossible"
 
 runReplT :: IO ((), (TyperEnv, EvalEnv))
-runReplT = runInputT defaultSettings $ runStateT insertion (TyperEnv typerPrelude Map.empty, evaluatorPrelude)
+runReplT = runInputT defaultSettings $ runStateT insertion (TyperEnv typerPrelude Map.empty Map.empty, evaluatorPrelude)
 
 repl :: IO ()
 repl = void runReplT

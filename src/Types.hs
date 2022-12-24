@@ -24,6 +24,8 @@ import Test.QuickCheck.Arbitrary.ADT
     ( ToADTArbitrary, genericArbitrary )
 import Text.Printf ( printf )
 import System.Random
+import Data.Bifunctor(Bifunctor(second))
+
 
 refresh :: TVariableInfo -> TVariableInfo
 refresh = id
@@ -55,7 +57,8 @@ typeSubstitution placeHolder type' target =
     TBool -> TBool
     TString -> TString
     TList (TListInfo listType) -> TList . TListInfo $ fmap (typeSubstitution placeHolder type') listType
-      
+    TAnonymusRecord fields -> TAnonymusRecord $ fmap (second $ typeSubstitution placeHolder type') fields
+    
 class Curryable a where  
     kurry :: a -> a -> a
 
@@ -137,12 +140,14 @@ data Type
     | TBool
     | TString
     | TList TListInfo
-    | TAnonymusRecord [Type]
+    | TAnonymusRecord [(Text, Type)]
     | TArrow Type Type
     | TVariable TVariableInfo
     | TForall AbstractionInfo
     | TApplication Type Type
     | TAbstraction AbstractionInfo
+    | TAlias Text
+    -- | TAlgebraic [(Text, [Type])]
     deriving (Generic, Eq)
 
 instance Show Type where
@@ -215,6 +220,7 @@ data Declaration
     = DeclExpr Expression
     | DeclFun Text Type Expression
     | DeclVal Text Expression
+    | DeclType Text Type
     deriving (Generic, Eq)
 
 instance Arbitrary Declaration where
@@ -240,6 +246,7 @@ data Expression
     | ETypeApplication Expression Type
     | EList [Expression]
     | EAnonymusRecord [Field]
+    -- | EAlgebraic [(Text, [Expression])]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Expression where

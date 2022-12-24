@@ -69,6 +69,8 @@ evalDeclarations env list = foldM fun env list
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
 
+
+-- TODO: add a sortBy so we can have record value equality
 evalExpression env (EAnonymusRecord fields) = do
   let (names, exprs) = unzip fields
   values <- for exprs (evalExpression env)
