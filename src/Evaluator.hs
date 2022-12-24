@@ -61,6 +61,9 @@ evalDeclarations env list = foldM fun env list
         fun acc (DeclVal name value) =
           do value <- evalExpression acc value
              return $ Map.insert name value acc
+        fun acc (DeclType _ _) =
+          -- TODO add cases of a discriminated union to the context as functions
+          pure acc
         fun acc (DeclFun name t expr) = do
           let zCombinator = EAbstraction "f" t Nothing (EApplication internalZ internalZ)
               newExpr = EApplication zCombinator (EAbstraction name t Nothing expr)

@@ -38,7 +38,10 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
         fun acc@TyperEnv{..} (DeclVal name value) =
           do type' <- typeCheckExpression acc value
              return $ acc { variableTypes = Map.insert name type' variableTypes}
-        fun acc@TyperEnv{..} (DeclType name type') = undefined
+        fun acc@TyperEnv{..} (DeclType name type') = do
+          kind <- kindCheckWithEnvironment acc type'
+          pure $ acc { kindContext = Map.insert (Name name) kind kindContext
+                     , aliasContext = Map.insert name type' aliasContext }
         fun acc@TyperEnv{..} (DeclFun name expectedType expr) =
           do kind <- kindCheckWithEnvironment acc expectedType
              case kind of
