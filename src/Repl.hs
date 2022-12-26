@@ -22,6 +22,7 @@ import Data.Either.Extra
 import Data.Foldable
 import Data.Maybe
 import Control.Monad.Except
+import Options.Applicative.Help (bodyHelp)
 
 
 type ReplT a = StateT (TyperEnv, EvalEnv) (InputT IO) a
@@ -63,15 +64,20 @@ replMessage :: (Show a, Show b) => Either a b -> ReplT ()
 replMessage (Left e) = replError e
 replMessage (Right i) = replSuccess i
 
-addDeclaration :: Text -> Expression -> ReplT ()
+addDeclaration :: Text -> Either Expression Type -> ReplT ()
 addDeclaration name body = do
-  typedValue <- typeCheckEval body
-  case typedValue of
-    Left e -> replError e
-    Right (t,v) -> do
-     (TyperEnv typerEnv _ _, evalEnv) <- get
-     let newTyperEnv = Map.insert name t typerEnv
-     put (TyperEnv newTyperEnv Map.empty Map.empty, Map.insert name v evalEnv)
+  (TyperEnv typerEnv x y, evalEnv) <- get
+  case body of
+    Left expr -> do
+      typedValue <- typeCheckEval expr
+      case typedValue of
+        Left e -> replError e
+        Right (t,v) -> do
+         let newTyperEnv = Map.insert name t typerEnv
+         put (TyperEnv newTyperEnv x y, Map.insert name v evalEnv)
+    Right type' -> do
+      let newTyperEnv = Map.insert name type' typerEnv
+      put (TyperEnv newTyperEnv x y, evalEnv)
 
 typeCheckEval :: Expression -> ReplT (Result (Type, Value))
 typeCheckEval expr = do
@@ -99,7 +105,9 @@ singleExecution content = do
                  Right _ -> do
                    result <- liftRepl . runExceptT $ evalExpression evalEnv expr
                    replMessage result
-          DeclFun name _ body -> addDeclaration name body
+          DeclFun name _ body -> addDeclaration name (Left body)
+          DeclVal name body -> addDeclaration name (Left body)
+          DeclType name type' -> addDeclaration name (Right type')
 
 getType :: String -> ReplT ()
 getType content = do
@@ -119,7 +127,9 @@ importFile path = do
      for_ decls
         (\case
           DeclExpr _ -> return ()
-          DeclFun name _ body -> addDeclaration name body)
+          DeclVal name body -> addDeclaration name (Left body)
+          DeclType name type' -> addDeclaration name (Right type')
+          DeclFun name _ body -> addDeclaration name (Left body))
 
 getParsed :: String -> ReplT ()
 getParsed content = replMessage $ parse declarationP "" content
