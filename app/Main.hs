@@ -25,13 +25,16 @@ fullExecution content = do
   case parse fileP "" content of
     Left errorParse -> putStrLn . unpack $ buildError (errorParse :: ParseError)
     Right decls -> do
-        typeEnv' <- runExceptT $ typeCheckDeclarations (TyperEnv typerPrelude Map.empty Map.empty) decls
+        typeEnv' <- runExceptT $ typeCheckDeclarations typerInitialEnv decls
         case typeEnv' of
          Left errorType -> TIO.putStrLn $ "\ESC[91m" <> errorType
          Right typeEnv -> do evalEnv' <- runExceptT $ evalDeclarations evaluatorPrelude decls
                              case evalEnv' of
                                Left errorEvaluator -> TIO.putStrLn $ "\ESC[91m" <> errorEvaluator
-                               Right evalEnv -> print "It worked!" --printMessage (Right result :: Either Text Value)
+                               Right evalEnv -> return ()
+                               
+typerInitialEnv :: TyperEnv
+typerInitialEnv = TyperEnv typerPrelude Map.empty Map.empty
 
 main :: IO ()
 main = do
@@ -46,13 +49,12 @@ main = do
         then fail "Silverware+ file does not terminate with .sw"
         else do
           content <- readFile f
-          fullExecution content
-          -- if not (justParse || justTypeCheck || justEvaluate) then fullExecution content
-          -- else do
-          --   let parsed = parse expressionP "" content
-          --   when justParse (either (const $ pure ()) (\x -> printMessage (Right x :: Either ParseError Expression)) parsed)
-          --   case parsed of
-          --     Left errorParse -> printMessage (Left errorParse :: Either ParseError Expression)
-          --     Right ast -> return ()
---                when justTypeCheck (runExceptT (typeCheck ast) >>= printMessage)
---                when justEvaluate (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (eval evaluatorPrelude ast) >>= printMessage)
+          if not (justParse || justTypeCheck || justEvaluate) then fullExecution content
+          else do
+             let parsed = parse expressionP "" content
+             when justParse (either (const $ pure ()) (TIO.putStrLn . buildMessage) parsed)
+             case parsed of
+               Left errorParse -> TIO.putStrLn $ buildError errorParse
+               Right ast -> do
+                  when justTypeCheck (runExceptT (typeCheckExpression typerInitialEnv ast) >>= printMessage)
+                  when justEvaluate (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (eval evaluatorPrelude ast) >>= printMessage)
