@@ -35,6 +35,9 @@ fullExecution content = do
 typerInitialEnv :: TyperEnv
 typerInitialEnv = TyperEnv typerPrelude Map.empty Map.empty
 
+differTyperEnv :: TyperEnv -> TyperEnv -> TyperEnv
+differTyperEnv (TyperEnv x y z) (TyperEnv a _ _) = TyperEnv (Map.difference x a) y z
+
 main :: IO ()
 main = do
   CommandOptions{..} <- parseArgs
@@ -55,5 +58,9 @@ main = do
              case parsedDecls of
                Left errorParse -> TIO.putStrLn $ buildError errorParse
                Right asts -> do
-                  when justTypeCheck (runExceptT (typeCheckDeclarations typerInitialEnv asts) >>= printMessage)
-                  when justEvaluate (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (evalDeclarations evaluatorPrelude asts) >>= printMessage)
+                  when
+                    justTypeCheck
+                    (runExceptT (typeCheckDeclarations typerInitialEnv asts) >>= printMessage . fmap (`differTyperEnv` typerInitialEnv))
+                  when
+                    justEvaluate
+                    (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (evalDeclarations evaluatorPrelude asts) >>= printMessage . fmap (`Map.difference` evaluatorPrelude))
