@@ -19,7 +19,7 @@ module Types (
 import Data.Text.Arbitrary ( Text )
 import Data.Text ( unpack )
 import GHC.Generics ( Generic )
-import Test.QuickCheck ( Arbitrary(arbitrary) )
+import Test.QuickCheck ( Arbitrary(arbitrary), listOf )
 import Test.QuickCheck.Arbitrary.ADT
     ( ToADTArbitrary, genericArbitrary )
 import Text.Printf ( printf )
@@ -167,6 +167,11 @@ instance Show Type where
   show (TForall info) = "forall " ++ show info
   show (TApplication fun arg) = printf "%s %s" (show fun) (show arg)
   show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack $ extractName label) (show kind) (show type')
+  show (TAlias name) = show name
+  show (TAnonymusRecord []) = printf "| Anonymus Record | EMPTY"
+  show (TAnonymusRecord list) = go "| Anonymus Record |\n" list
+    where go acc [] = acc
+          go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ "\n") xs
 
 instance Curryable Type where
   kurry = TArrow
@@ -234,6 +239,7 @@ instance Show Declaration where
   show (DeclExpr expr) = "Expression: " ++ show expr
   show (DeclFun name type' expr) = "Function: " ++ unpack name ++ " : " ++ show type' ++ " = " ++ show expr
   show (DeclVal name literal) = "Value: " ++ unpack name ++ " = " ++ show literal
+  show (DeclType name type') = "Type: " ++ unpack name ++ " = " ++ show type'
 
 type Label = Text
 type Field = (Label, Expression)
