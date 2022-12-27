@@ -23,9 +23,9 @@ evaluatorPrelude = Map.fromList $
                        ("map", map'),
                        ("filter", filter'),
                        ("fold", fold' id),
-                       ("foldBack", fold' reverse),
-                       ("readLines", readLines),
-                       ("readFile", readFile')]
+                       ("fold-back", fold' reverse),
+                       ("read-lines", readLines),
+                       ("read-file", readFile')]
   
 typerPrelude :: Map.Map Text Type
 typerPrelude = Map.fromList list
@@ -36,8 +36,8 @@ typerPrelude = Map.fromList list
                   ("filter", filterType),
                   ("fold", foldType),
                   ("fold-back", foldType),
-                  ("readLines", readLinesType),
-                  ("readFile", readFileType)]
+                  ("read-lines", readLinesType),
+                  ("read-file", readFileType)]
 
 readLinesType :: Type
 readLinesType =

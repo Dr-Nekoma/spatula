@@ -11,10 +11,11 @@ module Parser.Utilities
   , openDelimiter
   , closeDelimiter
   , curriedArrow
+  , isAllowed
   )
 where
  
-import Text.Parsec ( satisfy, many1, parserFail, Parsec, many, between, char, string, spaces, try, choice, manyTill)
+import Text.Parsec
 import Data.Set ( Set, fromList, member )
 import Data.Text ( Text, pack )
 import Data.Char ( isAlphaNum, isSymbol, isAscii )
@@ -24,7 +25,7 @@ type ParserT st = Parsec [Char] st
 
 typeVariableGeneric :: ParserT st Text
 typeVariableGeneric = do
-  char '!' >> do str <- many (satisfy $ or . sequence [isAlphaNum, isSymbol])
+  char '!' >> do str <- variable
                  if member str invalidVariables
                  then parserFail "Unexpected identifier for type variable name"
                  else return (pack str)
@@ -42,6 +43,8 @@ data Delimiter =
   | RightParens
   | LeftBraces
   | RightBraces
+  | ListDelimiter
+  | RecordDelimiter
   deriving (Enum, Bounded)
   
 instance Show Delimiter where
@@ -50,7 +53,9 @@ instance Show Delimiter where
   show LeftParens = "("   
   show RightParens = ")"   
   show LeftBraces = "{"   
-  show RightBraces = "}"   
+  show RightBraces = "}"
+  show ListDelimiter = "'"
+  show RecordDelimiter = "|"
 
 data Keyword =
     Lambda 
@@ -81,9 +86,20 @@ operators = map show ([minBound .. maxBound] :: [Operator])
 invalidVariables :: Set String
 invalidVariables = fromList $ keyWords ++ delimiters ++ operators
 
+isAllowed :: Char -> Bool
+isAllowed = and . sequence [canBe, cantBe]
+  where canBe = or . sequence [isAlphaNum, isSymbol, isAscii]
+        cantBe c = not . any ((== c) . head) $ " " : delimiters ++ ["\n"]
+
+variable :: ParserT st String
+variable = do
+  str <- many1 (satisfy isAllowed)
+  notFollowedBy (lookAhead (satisfy (not . isAllowed)))
+  return str
+  
 variableGeneric :: ParserT st Text
 variableGeneric = do
-  str <- many1 (satisfy $ or . sequence [isAlphaNum, isSymbol])
+  str <- variable
   if member str invalidVariables
   then parserFail "Unexpected identifier for variable name"
   else return (pack str)

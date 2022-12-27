@@ -1,1 +1,1 @@
-[print List|Integer| [^ [cdr Integer x] z '[[car Integer y]]]]
+[print List|Integer| [^ [cdr Integer '[1 2 3 4]] '[[car Integer '[5 6 7]]]]]

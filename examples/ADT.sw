@@ -7,7 +7,6 @@
   (B 'T)
   (C 'U)]
  
-
 [defalgebraic Axis
     X 
     Y

@@ -3,5 +3,4 @@
     [map Integer Integer f x]]]
 
 [print List|Integer| [abc [lambda [(a Integer)] : Integer [+ a 1]] 2]]
-[print String "test"]
     
