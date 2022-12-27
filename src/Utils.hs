@@ -1,12 +1,14 @@
-module Utils ( Result, ResultT, throwError', buildMessage, buildError, printMessage ) where
+{-# LANGUAGE OverloadedStrings #-}
+module Utils ( Result, ResultT, throwError', buildMessage, buildError, printMessage, addErrorColor, addSuccessColor ) where
 
 import Control.Monad.Except
 import Data.String ( IsString(..) )
-import Data.Text ( Text, pack )
+import qualified Data.Text as T ( Text, pack, filter)
 import qualified Data.Text.IO as TIO
+import Data.Text (Text)
 
-type Result a = Either Text a
-type ResultT a = ExceptT Text IO a
+type Result a = Either T.Text a
+type ResultT a = ExceptT T.Text IO a
 
 -- throwError' :: String -> ResultT a
 -- throwError' = throwError . pack
@@ -14,13 +16,22 @@ type ResultT a = ExceptT Text IO a
 throwError' :: (IsString e, MonadError e m) => String -> m a
 throwError' = throwError . fromString
 
-buildError :: Show a => a -> Text
-buildError error' =  pack $ "\ESC[91m" ++ show error'
+buildError :: (Show a) => a -> T.Text
+buildError error' = T.pack $ "\ESC[91m" <> show error'
 
-buildMessage :: Show a => a -> Text
-buildMessage something = pack $ "\ESC[94m" ++ show something
+buildMessage :: (Show a ) => a -> T.Text
+buildMessage something = T.pack $ "\ESC[94m" <> show something
+
+addErrorColor :: Text -> Text
+addErrorColor = (<>) "\ESC[91m"
+
+addSuccessColor :: Text -> Text
+addSuccessColor = (<>) "\ESC[94m"
 
 printMessage :: (Show a, Show b) => Either a b -> IO ()
-printMessage (Left e) = TIO.putStrLn $ buildError e
-printMessage (Right a) = TIO.putStrLn $ buildMessage a
+printMessage (Left e) = justPrint $ buildError e
+printMessage (Right a) = justPrint $ buildMessage a
+
+justPrint :: T.Text -> IO ()
+justPrint = TIO.putStrLn . T.filter (/= '"')
 

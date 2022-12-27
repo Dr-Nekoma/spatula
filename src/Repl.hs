@@ -54,15 +54,20 @@ findSpecialOption = isJust . snd
 liftRepl :: IO a -> ReplT a
 liftRepl = lift . liftIO
 
-replError :: Show a => a -> ReplT ()
-replError = liftRepl . putStrLn . unpack . buildError
+replError :: Text -> ReplT ()
+replError = liftRepl . TIO.putStrLn. addErrorColor
 
-replSuccess :: Show a => a -> ReplT ()
-replSuccess = liftRepl . putStrLn . unpack . buildMessage
+replSucess :: Text -> ReplT ()
+replSucess = liftRepl . TIO.putStrLn. addSuccessColor
+
+genericReplError :: Show a => a -> ReplT ()
+genericReplError = liftRepl . TIO.putStrLn . buildError
+
+genericReplSuccess :: Show a => a -> ReplT ()
+genericReplSuccess = liftRepl . TIO.putStrLn . buildMessage
 
 replMessage :: (Show a, Show b) => Either a b -> ReplT ()
-replMessage (Left e) = replError e
-replMessage (Right i) = replSuccess i
+replMessage = liftRepl . printMessage
 
 addDeclaration :: Text -> Either Expression Type -> ReplT ()
 addDeclaration name body = do
@@ -71,7 +76,7 @@ addDeclaration name body = do
     Left expr -> do
       typedValue <- typeCheckEval expr
       case typedValue of
-        Left e -> replError e
+        Left e -> genericReplError e
         Right (t,v) -> do
          let newTyperEnv = Map.insert name t typerEnv
          put (TyperEnv newTyperEnv x y, Map.insert name v evalEnv)
@@ -84,24 +89,24 @@ typeCheckEval expr = do
    (typerEnv, evalEnv) <- get
    type' <- liftIO $ runExceptT $ typeCheckExpression typerEnv expr
    case type' of
-     Left errorType -> return (Left $ buildError (errorType :: Text))
+     Left errorType -> return (Left $ addErrorColor (errorType :: Text))
      Right t -> do
        result <- liftIO $ runExceptT $ evalExpression evalEnv expr
        case result of
-         Left e -> return (Left $ buildError (e :: Text))
+         Left e -> return (Left $ addErrorColor (e :: Text))
          Right v -> return (Right (t, v))
 
 singleExecution :: String -> ReplT ()
 singleExecution content = do
   case parse declarationP "" content of
-    Left errorParse -> replError (errorParse :: ParseError)
+    Left errorParse -> genericReplError (errorParse :: ParseError)
     Right decl -> do
         case decl of
           DeclExpr expr -> do
             (typerEnv, evalEnv) <- get        
             do type' <- liftRepl . runExceptT $ typeCheckExpression typerEnv expr
                case type' of
-                 Left errorType -> replError (errorType :: Text)
+                 Left errorType -> replError errorType
                  Right _ -> do
                    result <- liftRepl . runExceptT $ evalExpression evalEnv expr
                    replMessage result
@@ -116,7 +121,7 @@ getType content = do
     Right ast -> do
       (typerEnv, _) <- get
       typed <- liftRepl $ runExceptT $ typeCheckExpression typerEnv ast
-      either replError replSuccess typed
+      either replError genericReplSuccess typed
 
 importFile :: FilePath -> ReplT ()
 importFile path = do
