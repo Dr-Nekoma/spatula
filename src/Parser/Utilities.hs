@@ -11,7 +11,7 @@ module Parser.Utilities
   , openDelimiter
   , closeDelimiter
   , curriedArrow
-  , isAllowed
+  , skip
   )
 where
  
@@ -20,6 +20,7 @@ import Data.Set ( Set, fromList, member )
 import Data.Text ( Text, pack )
 import Data.Char ( isAlphaNum, isSymbol, isAscii )
 import Types ( Curryable(..), Operator(..), TVariableInfo(..) )
+import Control.Monad
 
 type ParserT st = Parsec [Char] st
 
@@ -45,6 +46,9 @@ data Delimiter =
   | RightBraces
   | ListDelimiter
   | RecordDelimiter
+  | BeginCommentBlock
+  | CloseCommentBlock
+  | LineComment
   deriving (Enum, Bounded)
   
 instance Show Delimiter where
@@ -56,6 +60,9 @@ instance Show Delimiter where
   show RightBraces = "}"
   show ListDelimiter = "'"
   show RecordDelimiter = "|"
+  show BeginCommentBlock = "{;"
+  show CloseCommentBlock = ";}"
+  show LineComment = "//"
 
 data Keyword =
     Lambda 
@@ -90,6 +97,16 @@ isAllowed :: Char -> Bool
 isAllowed = and . sequence [canBe, cantBe]
   where canBe = or . sequence [isAlphaNum, isSymbol, isAscii]
         cantBe c = not . any ((== c) . head) $ " " : delimiters ++ ["\n"]
+
+skip :: ParserT st ()
+skip = void $ spaces *> many single <* spaces
+  where single = try (spaces *> commentBlock <* spaces) <|> try (spaces *> commentLine <* spaces)
+
+commentBlock :: ParserT st String
+commentBlock = string (show BeginCommentBlock) *> manyTill anyChar (try (string $ show CloseCommentBlock))
+
+commentLine :: ParserT st String
+commentLine = string (show LineComment) *> manyTill anyChar (try (char '\n'))
 
 variable :: ParserT st String
 variable = do

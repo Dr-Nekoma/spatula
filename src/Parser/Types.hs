@@ -3,7 +3,7 @@ module Parser.Types (typeP, typeVariable) where
 
 import Types
 import Parser.Kinds
-import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP)
+import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP, skip)
 import Text.Parsec
 
 typeP :: ParserT st Type
@@ -37,8 +37,8 @@ typeVariable = TVariable . Name <$> typeVariableGeneric
 
 typeForAll :: ParserT st Type
 typeForAll = do
-  something <- between (string "forall" *> spaces) (spaces *> char ';') (AbstractionInfo . Name <$> (typeVariableGeneric <* spaces <* char '.' <* spaces) <*> kindP)
-  between (char '(' *> spaces) (spaces *> char ')') (TForall . something <$> typeP)
+  something <- between (string "forall" *> skip) (skip *> char ';') (AbstractionInfo . Name <$> (typeVariableGeneric <* skip <* char '.' <* skip) <*> kindP)
+  between (char '(' *> skip) (skip *> char ')') (TForall . something <$> typeP)
 
 -- \forall list:( * -> *) -> \forall t: * -> \x: list f -> x
 -- forall List (-> * *) -> \forall t: * -> \x: list f -> x  

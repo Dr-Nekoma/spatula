@@ -6,28 +6,28 @@ import Parser.Types
 import Parser.Expressions
 import Parser.Utilities
 import Text.Parsec
-    ( char, spaces, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof, manyTill, anyChar )
+    ( char, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof, manyTill, anyChar )
 
 fileP :: ParserT st [Declaration]
-fileP = many (spaces *> declarationP <* spaces) <* eof
+fileP = many (skip *> declarationP <* skip)
 
 declarationP :: ParserT st Declaration
 declarationP = choice $ fmap try [DeclExpr <$> expressionP, defunP, defvalP]
 
 defvalP :: ParserT st Declaration
 defvalP = do
-  openDelimiter *> spaces *> string "define" <* spaces
-  name <- variableGeneric <* spaces
-  value <- expressionP <* spaces <* closeDelimiter <* spaces
+  openDelimiter *> skip *> string "define" <* skip
+  name <- variableGeneric <* skip
+  value <- expressionP <* skip <* closeDelimiter <* skip
   pure $ DeclVal name value
 
 defunP :: ParserT st Declaration
 defunP = do
-  let couples = (,) <$> (char '(' *> spaces *> variableGeneric <* spaces) <*> (typeP <* spaces <* char ')' <* spaces)
-  openDelimiter *> spaces *> string "defun" <* spaces
-  name <- variableGeneric <* spaces
-  args <- openDelimiter *> many1 (spaces *> couples) <* closeDelimiter <* spaces
-  (returnType, body) <- (,) <$> (spaces *> char ':' *> spaces *> typeP <* spaces) <*> expressionP <* closeDelimiter <* spaces
+  let couples = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (typeP <* skip <* char ')' <* skip)
+  openDelimiter *> skip *> string "defun" <* skip
+  name <- variableGeneric <* skip
+  args <- openDelimiter *> many1 (skip *> couples) <* closeDelimiter <* skip
+  (returnType, body) <- (,) <$> (skip *> char ':' *> skip *> typeP <* skip) <*> expressionP <* closeDelimiter <* skip
   let fun = ($ Nothing) . uncurry EAbstraction
       first = (\(lastText, lastType) -> EAbstraction lastText lastType (Just returnType) body) $ Prelude.last args
       funBody = Prelude.foldr fun first (Prelude.init args)
