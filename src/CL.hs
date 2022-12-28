@@ -27,6 +27,7 @@ data CommandOptions = CommandOptions
   , justTypeCheck :: !Bool
   , justEvaluate :: !Bool
   , justRepl :: !Bool
+  , compile :: !Bool
   , file :: !(Maybe FilePath)
   , debug :: !Bool
   }
@@ -51,6 +52,9 @@ parseArgs = do
           justRepl <- switch $
             short 'r' <> long "repl" <>
             help "Enter Silverware+'s REPL"
+          compile <- switch $
+            short 'c' <> long "compile" <>
+            help "Compilation (WIP)"  
           debug <- switch $
             short 'd' <> long "debug" <>
             help "Enable debug mode"
