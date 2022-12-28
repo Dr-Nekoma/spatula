@@ -58,6 +58,7 @@ typeSubstitution placeHolder type' target =
     TString -> TString
     TList (TListInfo listType) -> TList . TListInfo $ fmap (typeSubstitution placeHolder type') listType
     TAnonymusRecord fields -> TAnonymusRecord $ fmap (second $ typeSubstitution placeHolder type') fields
+    TAlias name type'' -> TAlias name $ typeSubstitution placeHolder type'' type'
     
 class Curryable a where  
     kurry :: a -> a -> a
@@ -150,7 +151,8 @@ data Type
     | TForall AbstractionInfo
     | TApplication Type Type
     | TAbstraction AbstractionInfo
-    | TAlias Text
+    | TAlias Text Type
+    | TAliasPlaceHolder Text
     | TAlgebraic [(Text, [Type])]
     deriving (Generic, Eq)
 
@@ -167,7 +169,8 @@ instance Show Type where
   show (TForall info) = "forall " ++ show info
   show (TApplication fun arg) = printf "%s %s" (show fun) (show arg)
   show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack $ extractName label) (show kind) (show type')
-  show (TAlias name) = show name
+  show (TAlias name type') = "Alias " ++ unpack name ++ " for type " ++ show type'
+  show (TAliasPlaceHolder name) = "This is an alias placeholder " ++ unpack name
   show (TAnonymusRecord []) = printf "| Anonymus Record | EMPTY"
   show (TAnonymusRecord list) = go "| Anonymus Record |\n" list
     where go acc [] = acc

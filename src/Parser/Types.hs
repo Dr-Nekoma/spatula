@@ -3,11 +3,11 @@ module Parser.Types (typeP, typeVariable) where
 
 import Types
 import Parser.Kinds
-import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP, skip)
+import Parser.Utilities ( ParserT, typeVariableGeneric, arrowP, skip, variableGeneric)
 import Text.Parsec
 
 typeP :: ParserT st Type
-typeP = choice $ fmap try [typeLiteral, arrowP typeP, typeForAll, typeList, typeVariable]
+typeP = choice $ fmap try [typeLiteral, arrowP typeP, typeForAll, typeList, typeVariable, typeAlias]
 
 typeLiteral :: ParserT st Type
 typeLiteral = choice $ fmap try [typeUnit, typeInteger, typeBool, typeRational, typeString]
@@ -32,6 +32,9 @@ typeList = string "List|" *> (TList . TListInfo . Just <$> typeP) <* char '|'
 
 typeVariable :: ParserT st Type
 typeVariable = TVariable . Name <$> typeVariableGeneric
+
+typeAlias :: ParserT st Type
+typeAlias = TAliasPlaceHolder <$> (string "@" *> variableGeneric)
 
 -- Type-Forall = Enclosed-Type ("forall" WhiteSpace+ Type-Variable WhiteSpace* "." WhiteSpace* Kind WhiteSpace* ";" WhiteSpace* Type)
 

@@ -3,7 +3,7 @@
 module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..) ) where
 
 import Types
-    ( Type(TForall, TUnit, TInteger, TRational, TArrow, TBool, TVariable, TApplication, TAbstraction, TString, TList, TAnonymusRecord),
+    ( Type(..),
       TListInfo(..),
       TVariableInfo(..),
       Kind(..),
@@ -23,6 +23,7 @@ import qualified Data.Map as Map
 import Control.Monad
 import SWPrelude()
 import Data.Bifunctor ( Bifunctor(second) )
+import Control.Monad.IO.Class
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -53,6 +54,12 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
                 else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show expectedType) (show type')
                other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show expectedType) (show other)
 
+findPlaceHolderAlias :: TyperEnv -> Type -> ResultT Type
+findPlaceHolderAlias TyperEnv{..} (TAliasPlaceHolder name) =
+  case Map.lookup name aliasContext of
+    Nothing -> throwError' $ printf "TYPE ERROR: Didn't find alias %s in environment" (show name)
+    Just t -> pure $ TAlias name t
+findPlaceHolderAlias _ t = pure t 
 
 typeCheckExpression :: TyperEnv -> Expression -> ResultT Type
 typeCheckExpression env (EList list) = do
@@ -207,6 +214,10 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TRational -> pure StarK
     TBool -> pure StarK
     TString -> pure StarK
+    TAliasPlaceHolder _ -> error "This should never happen. Something is broken in kind checking"
+    TAlias name _ -> 
+      let kind = Map.lookup (Name name) kindContext in
+      maybe (throwError' $ printf "Unbound type alias %s in the environment." (show name)) return kind
     TAnonymusRecord fields -> do
       let ifStar StarK = True
           ifStar _ = False
@@ -256,6 +267,8 @@ reduceType type' =
     TRational -> TRational
     TBool -> TBool
     TString -> TString
+    TAliasPlaceHolder _ -> error "This should never happen. Something is broken in reduction xD"
+    TAlias _ type'' -> reduceType type''
     TAnonymusRecord fields ->
       TAnonymusRecord $ map (second reduceType) fields
     TList (TListInfo type'') -> TList . TListInfo $ fmap reduceType type''

@@ -12,7 +12,7 @@ fileP :: ParserT st [Declaration]
 fileP = many (skip *> declarationP <* skip)
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [DeclExpr <$> expressionP, defunP, defvalP]
+declarationP = choice $ fmap try [DeclExpr <$> expressionP, defunP, defvalP, defaliasP]
 
 defvalP :: ParserT st Declaration
 defvalP = do
@@ -20,6 +20,13 @@ defvalP = do
   name <- variableGeneric <* skip
   value <- expressionP <* skip <* closeDelimiter <* skip
   pure $ DeclVal name value
+
+defaliasP :: ParserT st Declaration
+defaliasP = do
+  openDelimiter *> skip *> string "defalias" <* skip
+  name <- variableGeneric <* skip <* char '=' <* skip
+  type' <- typeP <* skip <* closeDelimiter <* skip
+  pure $ DeclType name type'
 
 defunP :: ParserT st Declaration
 defunP = do
