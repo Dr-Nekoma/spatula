@@ -7,10 +7,11 @@ module Main (main) where
 import CL
 import Evaluator
 import Typer
-import Data.Text ( append )
+import Data.Text ( append, concat, unpack )
 import qualified Data.Text.IO as TIO
 import Text.Parsec (parse, ParseError)
 import Parser
+import Compiler
 import Control.Monad.Except ( runExceptT )
 import SWPrelude
 import Control.Monad ( when )
@@ -64,3 +65,4 @@ main = do
                   when
                     justEvaluate
                     (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (evalDeclarations evaluatorPrelude asts) >>= printMessage . fmap (`Map.difference` evaluatorPrelude))
+                  when compile (writeFile "test.il" $ unpack (Data.Text.concat (generateIL asts [])))  
