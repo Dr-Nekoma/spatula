@@ -231,6 +231,7 @@ instance Arbitrary Operator where
 data Declaration
     = DeclExpr Expression
     | DeclFun Text Type Expression
+    | DeclModule Text [Declaration]
     | DeclVal Text Expression
     | DeclType Text Type
     deriving (Generic, Eq)
