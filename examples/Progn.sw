@@ -7,6 +7,6 @@
             [print String "Hello :)"]]
         [progn
             [print String "I love SQL Server <3"] 
-            [print String "Bye :)"]]]
+            [print String "Bye :)"]]]]
 
 [abc 1]

@@ -6,10 +6,10 @@ import Parser.Types
 import Parser.Expressions
 import Parser.Utilities
 import Text.Parsec
-    ( char, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof, manyTill, anyChar )
+    ( char, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof, manyTill, anyChar, manyAccum )
 
 fileP :: ParserT st [Declaration]
-fileP = many (skip *> declarationP <* skip)
+fileP = manyTill (skip *> declarationP <* skip) eof
 
 declarationP :: ParserT st Declaration
 declarationP = choice $ fmap try [DeclExpr <$> expressionP, defunP, defvalP, defaliasP]

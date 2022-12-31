@@ -34,7 +34,7 @@ data TyperEnv = TyperEnv
 
 -- TODO: We should have warnings if expressions are returning something other than unit
 typeCheckDeclarations :: TyperEnv -> [Declaration] -> ResultT TyperEnv
-typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declaration found to type check"
+typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations found to type check"
 typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
   where fun acc (DeclExpr expr) = typeCheckExpression acc expr >> return acc
         fun acc@TyperEnv{..} (DeclVal name value) =
