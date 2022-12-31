@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..) ) where
 
 import Types
@@ -59,6 +60,24 @@ findPlaceHolderAlias TyperEnv{..} (TAliasPlaceHolder name) =
   case Map.lookup name aliasContext of
     Nothing -> throwError' $ printf "TYPE ERROR: Didn't find alias %s in environment" (show name)
     Just t -> pure $ TAlias name t
+findPlaceHolderAlias env (TArrow t1 t2) = do
+  t1' <- findPlaceHolderAlias env t1
+  t2' <- findPlaceHolderAlias env t2
+  pure $ TArrow t1' t2'
+findPlaceHolderAlias env (TForall (AbstractionInfo i k t)) = do
+  t' <- findPlaceHolderAlias env t
+  pure . TForall $ AbstractionInfo i k t'
+findPlaceHolderAlias env (TApplication t1 t2) = do
+  t1' <- findPlaceHolderAlias env t1
+  t2' <- findPlaceHolderAlias env t2
+  pure $ TApplication t1' t2'
+findPlaceHolderAlias env (TAbstraction (AbstractionInfo i k t)) = do
+  t' <- findPlaceHolderAlias env t
+  pure . TAbstraction $ AbstractionInfo i k t'
+findPlaceHolderAlias env (TAnonymusRecord typedNames) = do
+  let (names, types) = unzip typedNames
+  ts <- for types (findPlaceHolderAlias env)
+  pure . TAnonymusRecord $ zip names ts
 findPlaceHolderAlias _ t = pure t 
 
 typeCheckExpression :: TyperEnv -> Expression -> ResultT Type
@@ -69,6 +88,13 @@ typeCheckExpression env (EList list) = do
     [] -> pure $ (TList . TListInfo) Nothing 
     (x:xs) | allSameType x xs -> pure $ (TList . TListInfo) (Just x)
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
+
+-- TODO add a warning message to the elements that are not Unit type (aside from the last one of course)
+typeCheckExpression env (EProgn list) = do
+  listTypes <- for list (fmap reduceType . typeCheckExpression env)
+  case listTypes of
+    [] -> pure TUnit
+    nonEmptyList -> pure $ last nonEmptyList
 
 typeCheckExpression env (EAnonymusRecord fields) = do
   let (labels, exprs) = unzip fields

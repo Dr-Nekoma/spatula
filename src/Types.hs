@@ -134,10 +134,6 @@ instance Arbitrary TVariableInfo where
 
 instance ToADTArbitrary TVariableInfo
 
-
--- TODO to handle proper error messages on some types (like algebraic types)
--- we need a way to store its alias to reference the name and not the internal
--- representation. In other words: TAlias Text => TAlias Text Type
 data Type
     = TUnit
     | TInteger
@@ -259,6 +255,7 @@ data Expression
     | ETypeApplication Expression Type
     | EList [Expression]
     | EAnonymusRecord [Field]
+    | EProgn [Expression]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Expression where

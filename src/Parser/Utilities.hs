@@ -32,10 +32,10 @@ typeVariableGeneric = do
                  else return (pack str)
 
 openDelimiter :: ParserT st Char
-openDelimiter = char '[' <* spaces
+openDelimiter = char '[' <* skip
 
 closeDelimiter :: ParserT st Char
-closeDelimiter = spaces *> char ']' 
+closeDelimiter = skip *> char ']' 
 
 data Delimiter =
     LeftBracket
@@ -49,6 +49,7 @@ data Delimiter =
   | BeginCommentBlock
   | CloseCommentBlock
   | LineComment
+  | ForallDelimiter
   deriving (Enum, Bounded)
   
 instance Show Delimiter where
@@ -63,6 +64,7 @@ instance Show Delimiter where
   show BeginCommentBlock = "{;"
   show CloseCommentBlock = ";}"
   show LineComment = "//"
+  show ForallDelimiter = "."
 
 data Keyword =
     Lambda 
@@ -71,6 +73,7 @@ data Keyword =
   | Star 
   | LetIn
   | LetPlus
+  | Progn
   deriving (Enum, Bounded)
 
 instance Show Keyword where
@@ -80,6 +83,7 @@ instance Show Keyword where
   show Star = "Star"
   show LetIn = "let-in"
   show LetPlus = "let+"
+  show Progn = "progn"
 
 delimiters :: [String]
 delimiters = map show ([minBound .. maxBound] :: [Delimiter])

@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Types (typeP, typeVariable) where
+module Parser.Types where
 
 import Types
 import Parser.Kinds
@@ -40,9 +40,7 @@ typeAlias = TAliasPlaceHolder <$> (string "@" *> variableGeneric)
 
 typeForAll :: ParserT st Type
 typeForAll = do
-  something <- between (string "forall" *> skip) (skip *> char ';') (AbstractionInfo . Name <$> (typeVariableGeneric <* skip <* char '.' <* skip) <*> kindP)
-  between (char '(' *> skip) (skip *> char ')') (TForall . something <$> typeP)
-
--- \forall list:( * -> *) -> \forall t: * -> \x: list f -> x
--- forall List (-> * *) -> \forall t: * -> \x: list f -> x  
-
+  char '(' *> skip *> string "forall" <* skip
+  typeVariableKind <- AbstractionInfo . Name <$> (typeVariableGeneric <* skip <* char '.' <* skip) <*> kindP
+  skip *> char ';' <* skip
+  TForall . typeVariableKind <$> (skip *> typeP <* skip <* char ')')

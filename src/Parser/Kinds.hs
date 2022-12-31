@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Parser.Kinds ( kindP ) where
+module Parser.Kinds where
 
 import Types
 import Parser.Utilities ( ParserT, arrowP)

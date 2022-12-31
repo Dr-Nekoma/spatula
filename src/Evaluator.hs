@@ -83,6 +83,10 @@ evalExpression env (EList list) = do
   evaluatedElems <- for list (evalExpression env)
   pure $ VList evaluatedElems
 
+evalExpression env (EProgn list) = do
+  evaluatedElems <- for list (evalExpression env)
+  pure $ last evaluatedElems
+
 evalExpression _ (ELiteral literal) = pure $ VLiteral literal
 
 evalExpression env (EVariable label) =

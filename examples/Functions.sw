@@ -65,3 +65,4 @@ fun (arg: forall T. (T -> Integer)) -> arg
 	    F]
 	    
 	[lambda [(a Integer) (b Integer)] [+ a b]]]
+

@@ -32,7 +32,7 @@ expressionsP :: ParserT st [Expression]
 expressionsP = many (skip *> expressionP <* skip) <* eof
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprAbstraction, letP, operatorP, literalListP]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprAbstraction, letP, operatorP, literalListP, prognP]
 
 exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <*> expr <* closeDelimiter
@@ -43,13 +43,18 @@ exprAbstraction = do
   openDelimiter *> string "lambda" *> skip
   let argAnd a = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (a <* skip <* char ')' <* skip)
   args <- openDelimiter *> many (fmap Left (argAnd typeP) <|> fmap (\(a,b) -> Right (Name a, b)) (argAnd kindP)) <* closeDelimiter
-  (returnType, body) <- (,) <$> (skip *> optionMaybe (skip *> char ':' *> skip *> typeP <* skip)) <*> expressionP <* closeDelimiter
+  (returnType, body) <- (,) <$> (skip *> optionMaybe (skip *> char ':' *> skip *> typeP <* skip)) <*> many1 (expressionP <* skip) <* closeDelimiter
   let fun (Right item) = ($ Nothing) . uncurry ETypeAbstraction $ item
       fun (Left item) = ($ Nothing) . uncurry EAbstraction $ item
       first = case Prelude.last args of
-                Left (lastText, lastType) -> EAbstraction lastText lastType returnType body
-                Right (lastText, lastKind) -> ETypeAbstraction lastText lastKind returnType body
+                Left (lastText, lastType) -> EAbstraction lastText lastType returnType (EProgn body)
+                Right (lastText, lastKind) -> ETypeAbstraction lastText lastKind returnType (EProgn body)
   pure $ Prelude.foldr fun first (Prelude.init args)
+
+prognP :: ParserT st Expression
+prognP = do
+  let elements = many (skip *> expressionP <* skip)
+  between (openDelimiter *> string "progn" *> skip) closeDelimiter (EProgn <$> (elements <* skip))
 
 letP :: ParserT st Expression
 letP = 

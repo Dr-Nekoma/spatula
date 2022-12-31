@@ -34,9 +34,9 @@ defunP = do
   openDelimiter *> skip *> string "defun" <* skip
   name <- variableGeneric <* skip
   args <- openDelimiter *> many1 (skip *> couples) <* closeDelimiter <* skip
-  (returnType, body) <- (,) <$> (skip *> char ':' *> skip *> typeP <* skip) <*> expressionP <* closeDelimiter <* skip
+  (returnType, body) <- (,) <$> (skip *> char ':' *> skip *> typeP <* skip) <*> many1 (expressionP <* skip) <* closeDelimiter <* skip
   let fun = ($ Nothing) . uncurry EAbstraction
-      first = (\(lastText, lastType) -> EAbstraction lastText lastType (Just returnType) body) $ Prelude.last args
+      first = (\(lastText, lastType) -> EAbstraction lastText lastType (Just returnType) (EProgn body)) $ Prelude.last args
       funBody = Prelude.foldr fun first (Prelude.init args)
       (_, types) = unzip args
   pure $ DeclFun name (curriedArrow types returnType) funBody
