@@ -8,6 +8,7 @@ import Utils ( ResultT, throwError' )
 import Text.Printf ( printf )
 import Data.Traversable
 import Control.Monad ( foldM )
+import Data.List
 
 type EvalEnv = Map.Map Text Value
 
@@ -74,7 +75,7 @@ evalExpression :: EvalEnv -> Expression -> ResultT Value
 
 
 -- TODO: add a sortBy so we can have record value equality
-evalExpression env (EAnonymusRecord fields) = do
+evalExpression env (EAnonymousRecord fields) = do
   let (names, exprs) = unzip fields
   values <- for exprs (evalExpression env)
   pure . VRecord $ zip names values
@@ -86,6 +87,25 @@ evalExpression env (EList list) = do
 evalExpression env (EProgn list) = do
   evaluatedElems <- for list (evalExpression env)
   pure $ last evaluatedElems
+
+evalExpression env (ERecordProjection expr label) = do
+  potentialRecord <- evalExpression env expr
+  case potentialRecord of
+    VRecord fields -> do
+      let fun target (name, _) = name == target
+      case find (fun label) fields of
+        Nothing ->  throwError' $ printf "ERROR: Record projection %s could not be found in %s" (unpack label) (show potentialRecord)
+        Just (_, value) -> pure value
+    other -> throwError' $ printf "ERROR: Record projection can only be used on records and got %s" (show other)
+
+evalExpression env (ERecordUpdate expr toUpdateList) = do
+  potentialRecord <- evalExpression env expr
+  case potentialRecord of
+    VRecord fields -> do
+      toUpdateValues <- Map.fromList <$> for toUpdateList (mapM (evalExpression env))
+      let mapFields = Map.fromList fields
+      pure $ VRecord . Map.toList $ toUpdateValues `Map.union` mapFields
+    other -> throwError' $ printf "TYPE ERROR: Record update can only be used on records and got %s" (show other)
 
 evalExpression _ (ELiteral literal) = pure $ VLiteral literal
 

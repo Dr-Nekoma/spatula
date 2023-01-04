@@ -17,7 +17,7 @@ import Types
       extractName,
       AbstractionInfo(AbstractionInfo) )
 import Data.List ( find, sortBy )
-import Data.Text (pack, Text)
+import Data.Text (pack, Text, unpack)
 import Text.Printf ( printf )
 import Utils ( ResultT, throwError' )
 import Data.Traversable
@@ -26,6 +26,8 @@ import Control.Monad
 import SWPrelude()
 import Data.Bifunctor ( Bifunctor(second) )
 import Control.Monad.IO.Class
+import Data.Either.Extra
+import qualified Data.Set as S
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -90,10 +92,10 @@ findPlaceholderAlias env@TyperEnv{..} (TAbstraction (AbstractionInfo i k t)) = d
   let newEnv = env { aliasContext = Map.insert (extractName i) (TVariable i) aliasContext }
   t' <- findPlaceholderAlias newEnv t
   pure . TAbstraction $ AbstractionInfo i k t'
-findPlaceholderAlias env (TAnonymusRecord typedNames) = do
+findPlaceholderAlias env (TAnonymousRecord typedNames) = do
   let (names, types) = unzip typedNames
   ts <- for types (findPlaceholderAlias env)
-  pure . TAnonymusRecord $ zip names ts
+  pure . TAnonymousRecord $ zip names ts
 findPlaceholderAlias _ TUnit = pure TUnit
 findPlaceholderAlias _ TInteger = pure TInteger
 findPlaceholderAlias _ TRational = pure TRational
@@ -125,10 +127,31 @@ typeCheckExpression env (EProgn list) = do
     [] -> pure TUnit
     nonEmptyList -> pure $ last nonEmptyList
 
-typeCheckExpression env (EAnonymusRecord fields) = do
+typeCheckExpression env (ERecordProjection expr label) = do
+  potentialRecord <- reduceType <$> typeCheckExpression env expr
+  case potentialRecord of
+    TAnonymousRecord fields -> do
+      let fun target (name, _) = name == target
+      case find (fun label) fields of
+        Nothing ->  throwError' $ printf "TYPE ERROR: Record projection %s could not be found in %s" (unpack label) (show potentialRecord)
+        Just (_, type') -> pure type'
+    other -> throwError' $ printf "TYPE ERROR: Record projection can only be used on records and got %s" (show other)
+
+typeCheckExpression env (ERecordUpdate expr toUpdateList) = do
+  potentialRecord <- reduceType <$> typeCheckExpression env expr
+  case potentialRecord of
+    TAnonymousRecord fields -> do
+      toUpdateTypes <- S.fromList <$> for toUpdateList (mapM (fmap reduceType . typeCheckExpression env))
+      let setFields = S.fromList fields
+      if toUpdateTypes `S.isSubsetOf` setFields
+      then pure $ TAnonymousRecord fields
+      else throwError' $ printf "TYPE ERROR: Didn't find fields %s in record update" (show $ S.difference toUpdateTypes setFields)
+    other -> throwError' $ printf "TYPE ERROR: Record update can only be used on records and got %s" (show other)
+
+typeCheckExpression env (EAnonymousRecord fields) = do
   let (labels, exprs) = unzip fields
   types <- for exprs (typeCheckExpression env)
-  pure $ TAnonymusRecord (sortBy (\(label1, _) (label2, _) -> compare label1 label2) (zip labels types))
+  pure $ TAnonymousRecord (sortBy (\(label1, _) (label2, _) -> compare label1 label2) (zip labels types))
   
 typeCheckExpression _ (ELiteral literal) =
   case literal of
@@ -278,7 +301,7 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TAlias name _ -> 
       let kind = Map.lookup (Name name) kindContext in
       maybe (throwError' $ printf "KIND ERROR: Unbound type alias %s in the environment." (show name)) return kind
-    TAnonymusRecord fields -> do
+    TAnonymousRecord fields -> do
       let ifStar StarK = True
           ifStar _ = False
       internalKinds <- for (map snd fields) (kindCheckWithEnvironment env)
@@ -330,8 +353,8 @@ reduceType type' =
     TString -> TString
     TAliasPlaceholder _ -> error "This should never happen. Something is broken in reduction xD"
     TAlias _ type'' -> reduceType type''
-    TAnonymusRecord fields ->
-      TAnonymusRecord $ map (second reduceType) fields
+    TAnonymousRecord fields ->
+      TAnonymousRecord $ map (second reduceType) fields
     TList (TListInfo type'') -> TList . TListInfo $ fmap reduceType type''
     TArrow parameter returnType -> TArrow (reduceType parameter) (reduceType returnType)
     TVariable ident -> TVariable ident

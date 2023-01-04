@@ -32,16 +32,14 @@ expressionsP :: ParserT st [Expression]
 expressionsP = many (skip *> expressionP <* skip) <* eof
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition, exprApplication, exprAbstraction, letP, operatorP, literalListP, prognP]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication]
 
 exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <*> expr <* closeDelimiter
   where expr = skip *> expressionP <* skip
 
 arguments :: ParserT st [Either (TVariableInfo, Kind) (Text, Type)]
-arguments = 
-  let argAnd a = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (a <* skip <* char ')' <* skip)
-  in openDelimiter *> many (choice $ fmap try [fmap (\(a,b) -> Left (Name a, b)) (argAnd kindP), fmap Right (argAnd typeP)]) <* closeDelimiter
+arguments = openDelimiter *> many (choice $ fmap try [fmap (\(a,b) -> Left (Name a, b)) (argAnd kindP), fmap Right (argAnd typeP)]) <* closeDelimiter
 
 foldArgs :: [Either (TVariableInfo, Kind) (Text, Type)] -> Maybe Type -> [Expression] -> Expression
 foldArgs args returnType body =
@@ -51,6 +49,9 @@ foldArgs args returnType body =
                 Left (lastText, lastType) -> ETypeAbstraction lastText lastType returnType (EProgn body)
                 Right (lastText, lastKind) -> EAbstraction lastText lastKind returnType (EProgn body)
   in Prelude.foldr fun first (Prelude.init args)
+
+anonymousRecordP :: ParserT st Expression
+anonymousRecordP = EAnonymousRecord <$> (string "{|" *> skip *> many1 (argAnd expressionP) <* skip <* string "|}")
   
 exprAbstraction :: ParserT st Expression
 exprAbstraction = do
@@ -63,6 +64,12 @@ prognP :: ParserT st Expression
 prognP = do
   let elements = many (skip *> expressionP <* skip)
   between (openDelimiter *> string "progn" *> skip) closeDelimiter (EProgn <$> (elements <* skip))
+
+recordProjectionP :: ParserT st Expression
+recordProjectionP = between (openDelimiter *> string "getr" *> skip) closeDelimiter (ERecordProjection <$> expressionP <*> (skip *> variableGeneric <* skip))
+
+recordUpdateP :: ParserT st Expression
+recordUpdateP = between (openDelimiter *> string "setr" *> skip) closeDelimiter (ERecordUpdate <$> expressionP <*> (skip *> listP (argAnd expressionP) <* skip))
 
 letP :: ParserT st Expression
 letP = 

@@ -42,7 +42,7 @@
   (defconst silverware-keywords
     '("if" "match" "defun" "do" "open" "defalgebraic" "defmacro" "lambda" "and" "or"
       "Unit" "Integer" "Rational" "String" "Bool" "let-in" "let+" "forall"
-      "+" "-" "*" "/" "=" "print" "defun"
+      "+" "-" "*" "/" "=" "print" "define" "defalias"
       "defrecord" "begin" "call" "->" "rec" "list" "quote" "#" "@" "!")))
 
 (defconst silverware-highlights

@@ -3,6 +3,7 @@ module Parser.Declarations where
 
 import Data.Text ( Text )
 import Types
+import Parser.Kinds
 import Parser.Types
 import Parser.Expressions
 import Parser.Utilities
@@ -22,12 +23,19 @@ defvalP = do
   value <- expressionP <* skip <* closeDelimiter <* skip
   pure $ DeclVal name value
 
+-- [defalias Name String]
+
+--[defAlias Combine [(a Star)] |List a|]
+
 defaliasP :: ParserT st Declaration
 defaliasP = do
   openDelimiter *> skip *> string "defalias" <* skip
   name <- variableGeneric <* skip
+  namedKinds <- skip *> optionMaybe (openDelimiter *> many1 (argAnd kindP) <* closeDelimiter) <* skip
   type' <- typeP <* skip <* closeDelimiter <* skip
-  pure $ DeclType name type'
+  let t = maybe type' (Prelude.foldr fun type') namedKinds
+      fun (n, kind) acc = TAbstraction (AbstractionInfo (Name n) kind acc)
+  pure $ DeclType name t
 
 curriedArrow :: Curryable a => [a] -> a -> a
 curriedArrow types returnType = Prelude.foldr kurry returnType types 

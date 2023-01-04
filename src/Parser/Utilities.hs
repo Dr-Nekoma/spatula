@@ -12,6 +12,7 @@ module Parser.Utilities
   , closeDelimiter
   , curriedArrow
   , skip
+  , argAnd
   )
 where
  
@@ -125,14 +126,20 @@ variableGeneric = do
   then parserFail "Unexpected identifier for variable name"
   else return (pack str)
 
+argAnd :: ParserT st a -> ParserT st (Text, a)
+argAnd a = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (a <* skip <* char ')' <* skip)
+
 curriedArrow :: Curryable a => [a] -> a -> a
 curriedArrow types returnType = Prelude.foldr kurry returnType types  
 
+listArrowP :: ParserT st a -> ParserT st [a]
+listArrowP p = between (char '(' *> skip) (skip *> char ')') (many1 (skip *> p))
+
 listP :: ParserT st a -> ParserT st [a]
-listP p = between (char '(' *> spaces) (spaces *> char ')') (many1 (spaces *> p))
+listP p = between openDelimiter closeDelimiter (many1 (skip *> p))
 
 arrowP :: Curryable a => ParserT st a -> ParserT st a
 arrowP p = 
-  let arrow = string "->" *> spaces
-      returnType = spaces *> p
-  in between (char '(' *> spaces) (spaces *> char ')') (curriedArrow <$> (arrow *> listP p) <*> returnType)
+  let arrow = string "->" *> skip
+      returnType = skip *> p
+  in between (char '(' *> skip) (skip *> char ')') (curriedArrow <$> (arrow *> listArrowP p) <*> returnType)

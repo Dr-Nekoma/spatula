@@ -58,7 +58,7 @@ typeSubstitution placeHolder type' target =
     TBool -> TBool
     TString -> TString
     TList (TListInfo listType) -> TList . TListInfo $ fmap (typeSubstitution placeHolder type') listType
-    TAnonymusRecord fields -> TAnonymusRecord $ fmap (second $ typeSubstitution placeHolder type') fields
+    TAnonymousRecord fields -> TAnonymousRecord $ fmap (second $ typeSubstitution placeHolder type') fields
     TAlias name type'' -> TAlias name $ typeSubstitution placeHolder type'' type'
     
 class Curryable a where  
@@ -67,7 +67,7 @@ class Curryable a where
 data Kind =
     StarK
   | ArrowK Kind Kind
-  deriving (Eq, Generic)
+  deriving (Eq, Generic, Ord)
 
 instance Show Kind where
   show StarK = "*"
@@ -80,7 +80,7 @@ instance Arbitrary Kind where
   arbitrary = genericArbitrary
 
 data AbstractionInfo = AbstractionInfo TVariableInfo Kind Type
-  deriving (Generic)
+  deriving (Generic, Ord)
 
 instance Show AbstractionInfo where
   show (AbstractionInfo label kind type') = printf "%s. %s; %s" (unpack $ extractName label) (show kind) (show type')
@@ -103,7 +103,7 @@ instance Eq AbstractionInfo where
 -- When type aliases are added we should include type alias for list that returns the List|T| type
 -- Do we still need the maybe type here? Consider that we are implementing the type list using type alias
 data TListInfo = TListInfo (Maybe Type)
-  deriving (Generic)
+  deriving (Generic, Ord)
 
 instance Arbitrary TListInfo where
   arbitrary = genericArbitrary
@@ -143,7 +143,7 @@ data Type
     | TBool
     | TString
     | TList TListInfo
-    | TAnonymusRecord [(Text, Type)]
+    | TAnonymousRecord [(Text, Type)]
     | TArrow Type Type
     | TVariable TVariableInfo
     | TForall AbstractionInfo
@@ -152,7 +152,7 @@ data Type
     | TAlias Text Type
     | TAliasPlaceholder Text
     | TAlgebraic [(Text, [Type])]
-    deriving (Generic, Eq)
+    deriving (Generic, Eq, Ord)
 
 instance Show Type where
   show TUnit = "Unit"
@@ -173,10 +173,10 @@ instance Show Type where
   show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack $ extractName label) (show kind) (show type')
   show (TAlias name type') = "(Alias " ++ unpack name ++ " , " ++ show type' ++ ")"
   show (TAliasPlaceholder name) = unpack name
-  show (TAnonymusRecord []) = printf "| Anonymus Record | EMPTY"
-  show (TAnonymusRecord list) = go "| Anonymus Record |\n" list
-    where go acc [] = acc
-          go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ "\n") xs
+  show (TAnonymousRecord []) = printf "| Anonymous Record | EMPTY"
+  show (TAnonymousRecord list) = go "| Anonymous Record | " list
+    where go acc [] = acc ++ "\n"
+          go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ " ") xs
 
 instance Curryable Type where
   kurry = TArrow
@@ -260,8 +260,10 @@ data Expression
     | ETypeAbstraction TVariableInfo Kind (Maybe Type) Expression
     | ETypeApplication Expression Type
     | EList [Expression]
-    | EAnonymusRecord [Field]
+    | EAnonymousRecord [Field]
     | EProgn [Expression]
+    | ERecordProjection Expression Label
+    | ERecordUpdate Expression [(Label, Expression)]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Expression where
