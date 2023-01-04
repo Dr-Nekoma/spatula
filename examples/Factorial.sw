@@ -23,4 +23,4 @@
             [+ [fibonacci [- x 1]] 
                [fibonacci [- x 2]]]]]]
 
-[print Integer [factorial 150 1]]
+[print !Integer [factorial 150 1]]

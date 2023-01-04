@@ -44,11 +44,12 @@ aliasPrelude = Map.fromList list
   where list = [("String", TString),
                 ("Integer", TInteger),
                 ("Unit", TUnit),
+                ("Bool", TBool),
                 ("Rational", TRational),
                 ("List", TAbstraction (AbstractionInfo (Name "T") StarK (TList . TListInfo . Just $ TVariable (Name "T"))))]
 
 kindPrelude :: Map.Map TVariableInfo Kind
-kindPrelude = Map.fromList [(Name "String", StarK), (Name "Integer", StarK), (Name "Unit", StarK), (Name "Rational", StarK), (Name "List", ArrowK StarK StarK)]
+kindPrelude = Map.fromList [(Name "String", StarK), (Name "Integer", StarK), (Name "Bool", StarK), (Name "Unit", StarK), (Name "Rational", StarK), (Name "List", ArrowK StarK StarK)]
 
 readLinesType :: Type
 readLinesType =

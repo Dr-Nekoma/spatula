@@ -1,1 +1,1 @@
-[print List|String| [read-lines "examples/Read.sw"]]  
+[print !|List String| [read-lines "examples/Read.sw"]]  

@@ -14,6 +14,7 @@ module Types (
   Expression(..),
   Declaration(..),
   Label,
+  extractName,
   Field) where
 
 import Data.Text.Arbitrary ( Text )
@@ -149,7 +150,7 @@ data Type
     | TApplication Type Type
     | TAbstraction AbstractionInfo
     | TAlias Text Type
-    | TAliasPlaceHolder Text
+    | TAliasPlaceholder Text
     | TAlgebraic [(Text, [Type])]
     deriving (Generic, Eq)
 
@@ -161,13 +162,17 @@ instance Show Type where
   show TString = "String"
   show (TList (TListInfo (Just type'))) = printf "List|%s|" (show type')
   show (TList (TListInfo Nothing)) = "List|_|"
-  show (TArrow source target) = printf "%s -> %s" (show source) (show target)
+  show (TArrow source target) =
+    case source of
+      TArrow _ _ -> printf "(%s) -> %s" (show source) (show target)
+      TForall _ -> printf "(%s) -> %s" (show source) (show target)
+      _ ->  printf "%s -> %s" (show source) (show target)
   show (TVariable label) = unpack $ extractName label
   show (TForall info) = "forall " ++ show info
   show (TApplication fun arg) = printf "%s <- %s" (show fun) (show arg)
   show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack $ extractName label) (show kind) (show type')
-  show (TAlias name type') = "Alias " ++ unpack name ++ " for type " ++ show type'
-  show (TAliasPlaceHolder name) = "AliasP : " ++ unpack name
+  show (TAlias name type') = "(Alias " ++ unpack name ++ " , " ++ show type' ++ ")"
+  show (TAliasPlaceholder name) = unpack name
   show (TAnonymusRecord []) = printf "| Anonymus Record | EMPTY"
   show (TAnonymusRecord list) = go "| Anonymus Record |\n" list
     where go acc [] = acc

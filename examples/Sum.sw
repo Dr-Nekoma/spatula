@@ -1,1 +1,1 @@
-[print Integer [+ 1 1]]
+[print !Integer [+ 1 1]]

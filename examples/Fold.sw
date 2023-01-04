@@ -1,8 +1,8 @@
 [print
- Integer
+ !Integer
  [fold-back
-   Integer
-   Integer
+   !Integer
+   !Integer
    [lambda [(element Integer)
             (accumulator Integer)] 
  	    : Integer

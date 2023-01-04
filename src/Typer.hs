@@ -14,6 +14,7 @@ import Types
       Literal(LBool, LUnit, LInteger, LRational, LString),
       Operator(..),
       typeSubstitution,
+      extractName,
       AbstractionInfo(AbstractionInfo) )
 import Data.List ( find, sortBy )
 import Data.Text (pack, Text)
@@ -52,12 +53,12 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
           do type' <- typeCheckExpression acc value
              return $ acc { variableTypes = Map.insert name type' variableTypes}
         fun acc@TyperEnv{..} (DeclType name t) = do
-          type' <- findPlaceHolderAlias acc t
+          type' <- findPlaceholderAlias acc t
           kind <- kindCheckWithEnvironment acc type'
           pure $ acc { kindContext = Map.insert (Name name) kind kindContext
                      , aliasContext = Map.insert name type' aliasContext }
         fun acc@TyperEnv{..} (DeclFun name expectedType expr) =
-          do type' <- findPlaceHolderAlias acc expectedType
+          do type' <- findPlaceholderAlias acc expectedType
              kind <- kindCheckWithEnvironment acc type'
              case kind of
                StarK -> do
@@ -68,42 +69,44 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
                 else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show type') (show type')
                other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show type') (show other)
 
-findPlaceHolderAlias :: TyperEnv -> Type -> ResultT Type
-findPlaceHolderAlias TyperEnv{..} (TAliasPlaceHolder name) =
+findPlaceholderAlias :: TyperEnv -> Type -> ResultT Type
+findPlaceholderAlias TyperEnv{..} (TAliasPlaceholder name) =
   case Map.lookup name aliasContext of
     Nothing -> throwError' $ printf "TYPE ERROR: Didn't find alias %s in environment" (show name)
     Just t -> pure $ TAlias name t
-findPlaceHolderAlias env (TArrow t1 t2) = do
-  t1' <- findPlaceHolderAlias env t1
-  t2' <- findPlaceHolderAlias env t2
+findPlaceholderAlias env (TArrow t1 t2) = do
+  t1' <- findPlaceholderAlias env t1
+  t2' <- findPlaceholderAlias env t2
   pure $ TArrow t1' t2'
-findPlaceHolderAlias env (TForall (AbstractionInfo i k t)) = do
-  t' <- findPlaceHolderAlias env t
+findPlaceholderAlias env@TyperEnv{..} (TForall (AbstractionInfo i k t)) = do
+  let newEnv = env { aliasContext = Map.insert (extractName i) (TVariable i) aliasContext }
+  t' <- findPlaceholderAlias newEnv t
   pure . TForall $ AbstractionInfo i k t'
-findPlaceHolderAlias env (TApplication t1 t2) = do
-  t1' <- findPlaceHolderAlias env t1
-  t2' <- findPlaceHolderAlias env t2
+findPlaceholderAlias env (TApplication t1 t2) = do
+  t1' <- findPlaceholderAlias env t1
+  t2' <- findPlaceholderAlias env t2
   pure $ TApplication t1' t2'
-findPlaceHolderAlias env (TAbstraction (AbstractionInfo i k t)) = do
-  t' <- findPlaceHolderAlias env t
+findPlaceholderAlias env@TyperEnv{..} (TAbstraction (AbstractionInfo i k t)) = do
+  let newEnv = env { aliasContext = Map.insert (extractName i) (TVariable i) aliasContext }
+  t' <- findPlaceholderAlias newEnv t
   pure . TAbstraction $ AbstractionInfo i k t'
-findPlaceHolderAlias env (TAnonymusRecord typedNames) = do
+findPlaceholderAlias env (TAnonymusRecord typedNames) = do
   let (names, types) = unzip typedNames
-  ts <- for types (findPlaceHolderAlias env)
+  ts <- for types (findPlaceholderAlias env)
   pure . TAnonymusRecord $ zip names ts
-findPlaceHolderAlias _ TUnit = pure TUnit
-findPlaceHolderAlias _ TInteger = pure TInteger
-findPlaceHolderAlias _ TRational = pure TRational
-findPlaceHolderAlias _ TBool = pure TBool
-findPlaceHolderAlias _ TString = pure TString
-findPlaceHolderAlias _ (TList v) = pure (TList v)
-findPlaceHolderAlias _ (TVariable v) = pure (TVariable v)
-findPlaceHolderAlias env (TAlias name type') = do
-  t' <- findPlaceHolderAlias env type'
+findPlaceholderAlias _ TUnit = pure TUnit
+findPlaceholderAlias _ TInteger = pure TInteger
+findPlaceholderAlias _ TRational = pure TRational
+findPlaceholderAlias _ TBool = pure TBool
+findPlaceholderAlias _ TString = pure TString
+findPlaceholderAlias _ (TList v) = pure (TList v)
+findPlaceholderAlias _ (TVariable v) = pure (TVariable v)
+findPlaceholderAlias env (TAlias name type') = do
+  t' <- findPlaceholderAlias env type'
   pure $ TAlias name t'
-findPlaceHolderAlias env (TAlgebraic typedNames) = do
+findPlaceholderAlias env (TAlgebraic typedNames) = do
   let (names, types) = unzip typedNames
-  ts <- mapM (\ts -> for ts (findPlaceHolderAlias env)) types
+  ts <- mapM (\ts -> for ts (findPlaceholderAlias env)) types
   pure . TAlgebraic $ zip names ts
 
 typeCheckExpression :: TyperEnv -> Expression -> ResultT Type
@@ -154,14 +157,14 @@ typeCheckExpression env@TyperEnv{..} (ELet Plus ((label, expr):xs) body) = do
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
 typeCheckExpression env@TyperEnv{..} (EAbstraction label t returnType expression) = do
-  type' <- findPlaceHolderAlias env t
+  type' <- findPlaceholderAlias env t
   parameterKind <- kindCheckWithEnvironment env type'
   case parameterKind of 
     StarK -> do 
       let newEnv = env { variableTypes = Map.insert label type' variableTypes }
       resultType <- typeCheckExpression newEnv expression
       case returnType of
-        Just rt -> do potentialAlias <- findPlaceHolderAlias env rt
+        Just rt -> do potentialAlias <- findPlaceholderAlias env rt
                       annotatedReturnKind <- kindCheckWithEnvironment env potentialAlias
                       case annotatedReturnKind of
                         StarK -> do let reducedAnnotatedType = reduceType potentialAlias
@@ -200,10 +203,11 @@ typeCheckExpression env (ECondition cond thenBranch elseBranch) = do
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
 typeCheckExpression env@TyperEnv{..} (ETypeAbstraction label kind returnType body) = do
-  let newKindEnv = env { kindContext = Map.insert label kind kindContext }
+  let newKindEnv = env { kindContext = Map.insert label kind kindContext
+                       , aliasContext = Map.insert (extractName label) (TVariable label) aliasContext }
   resultType <- typeCheckExpression newKindEnv body
   case returnType of
-    Just rt -> do potentialAlias <- findPlaceHolderAlias env rt
+    Just rt -> do potentialAlias <- findPlaceholderAlias env rt
                   annotatedReturnKind <- kindCheckWithEnvironment newKindEnv potentialAlias
                   case annotatedReturnKind of
                     StarK -> do let reducedAnnotatedType = reduceType potentialAlias
@@ -218,7 +222,7 @@ typeCheckExpression env (ETypeApplication expr type') = do
   reducedFunctionType <- reduceType <$> typeCheckExpression env expr
   case reducedFunctionType of
     TForall (AbstractionInfo identifier kind bodyType) -> do
-     potentialAlias <- findPlaceHolderAlias env type'
+     potentialAlias <- findPlaceholderAlias env type'
      expectedKind <- kindCheckWithEnvironment env potentialAlias
      if kind == expectedKind
        then pure $ typeSubstitution identifier potentialAlias bodyType
@@ -270,7 +274,7 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TRational -> pure StarK
     TBool -> pure StarK
     TString -> pure StarK
-    TAliasPlaceHolder _ -> error "KIND ERROR: This should never happen. Something is broken in kind checking"
+    TAliasPlaceholder _ -> error "KIND ERROR: This should never happen. Something is broken in kind checking"
     TAlias name _ -> 
       let kind = Map.lookup (Name name) kindContext in
       maybe (throwError' $ printf "KIND ERROR: Unbound type alias %s in the environment." (show name)) return kind
@@ -311,8 +315,9 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
                           else throwError' $ printf "KIND ERROR: Kind argument %s does not match expected kind %s." (show kindArg) (show k1) 
         kind' -> throwError' $ printf "KIND ERROR: Type abstraction of kind %s is not a arrow kind" (show kind')
     TAbstraction (AbstractionInfo label kind bodyType) -> do
-      let newEnv = Map.insert label kind kindContext
-      kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
+      let newKindEnv = Map.insert label kind kindContext
+          newAliasEnv = Map.insert (extractName label) (TVariable label) aliasContext
+      kindBody <- kindCheckWithEnvironment (env {kindContext = newKindEnv, aliasContext = newAliasEnv}) bodyType
       pure $ ArrowK kind kindBody      
 
 reduceType :: Type -> Type
@@ -323,7 +328,7 @@ reduceType type' =
     TRational -> TRational
     TBool -> TBool
     TString -> TString
-    TAliasPlaceHolder _ -> error "This should never happen. Something is broken in reduction xD"
+    TAliasPlaceholder _ -> error "This should never happen. Something is broken in reduction xD"
     TAlias _ type'' -> reduceType type''
     TAnonymusRecord fields ->
       TAnonymusRecord $ map (second reduceType) fields

@@ -110,7 +110,7 @@ commentBlock :: ParserT st String
 commentBlock = string (show BeginCommentBlock) *> manyTill anyChar (try (string $ show CloseCommentBlock))
 
 commentLine :: ParserT st String
-commentLine = string (show LineComment) *> manyTill anyChar (try (char '\n'))
+commentLine = string (show LineComment) *> manyTill anyChar (try (char '\n') <|> try (eof >> char ' '))
 
 variable :: ParserT st String
 variable = do

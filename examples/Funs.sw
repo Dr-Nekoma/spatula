@@ -2,4 +2,4 @@
 
 [defun add2 [(a Integer)] : Integer [add a 2]]
 
-[print Integer [add2 4]]
+[print !Integer [add2 4]]

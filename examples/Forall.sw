@@ -1,11 +1,5 @@
-[defun id [(T Star) (x @T)] : @T
-  x]
+[defun id [(T Star) (arg T)] : T arg]
 
-[print !String [id !String "Lemos"]]
+[defun apply-id [(id (forall T. Star; (-> (T) T)))] : Unit [print !|List Integer| [id !|List Integer| '[1 2 3 4]]]]
 
-// [abc Integer '[1 2 3]]
-
-{;
-forall !T. T -> Unit
-(ETypeAbstraction "T" * Nothing (EProgn [EApplication (ETypeApplication (EVariable "print") Integer) (ELiteral 2)]))
-;}
+[apply-id id]
