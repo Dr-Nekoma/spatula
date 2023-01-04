@@ -84,14 +84,18 @@ addDeclaration name body = do
         Right (t,v) -> do
          let newTyperEnv = Map.insert name t typerEnv
          put (TyperEnv newTyperEnv x y, Map.insert name v evalEnv)
-    Right type' -> do
-      kind <- liftRepl . runExceptT $ kindCheckWithEnvironment (TyperEnv typerEnv x y) type'
-      case kind of
+    Right t -> do
+      type' <- liftRepl . runExceptT $ findPlaceholderAlias (TyperEnv typerEnv x y) t
+      case type' of
         Left e -> genericReplError e
-        Right k -> do
-          let x' = Map.insert (Name name) k x
-              y' = Map.insert name type' y
-          put (TyperEnv typerEnv x' y', evalEnv)
+        Right t' -> do
+          kind <- liftRepl . runExceptT $ kindCheckWithEnvironment (TyperEnv typerEnv x y) t'
+          case kind of
+            Left e -> genericReplError e
+            Right k -> do
+              let x' = Map.insert (Name name) k x
+                  y' = Map.insert name t' y
+              put (TyperEnv typerEnv x' y', evalEnv)
 
 typeCheckEval :: Expression -> ReplT (Result (Type, Value))
 typeCheckEval expr = do

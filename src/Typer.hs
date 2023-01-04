@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
-module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..), kindCheckWithEnvironment ) where
+module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..), kindCheckWithEnvironment, findPlaceholderAlias ) where
 
 import Types
     ( Type(..),

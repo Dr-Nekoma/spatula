@@ -172,9 +172,9 @@ instance Show Type where
       _ ->  printf "%s -> %s" (show source) (show target)
   show (TVariable label) = unpack $ extractName label
   show (TForall info) = "forall " ++ show info
-  show (TApplication fun arg) = printf "%s <- %s" (show fun) (show arg)
+  show (TApplication fun arg) = printf "|%s %s|" (show fun) (show arg)
   show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack $ extractName label) (show kind) (show type')
-  show (TAlias name type') = "(Alias " ++ unpack name ++ " , " ++ show type' ++ ")"
+  show (TAlias name _) = unpack name
   show (TAliasPlaceholder name) = unpack name
   show (TAnonymousRecord []) = printf "| Anonymous Record | EMPTY"
   show (TAnonymousRecord list) = go "| Anonymous Record | " list
