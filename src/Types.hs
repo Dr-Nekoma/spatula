@@ -70,8 +70,11 @@ data Kind =
   deriving (Eq, Generic, Ord)
 
 instance Show Kind where
-  show StarK = "*"
-  show (ArrowK kind1 kind2) = show kind1 ++ " -> " ++ show kind2
+  show StarK = "Star"
+  show (ArrowK kind1 kind2) =
+    case kind1 of
+      ArrowK _ _ -> printf "(%s) -> %s" (show kind1) (show kind2)
+      _ ->  printf "%s -> %s" (show kind1) (show kind2)
 
 instance Curryable Kind where
   kurry = ArrowK

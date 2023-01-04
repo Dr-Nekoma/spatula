@@ -25,7 +25,7 @@ evaluatorPrelude = Map.fromList $
                        ("fold", fold' id),
                        ("fold-back", fold' reverse),
                        ("read-lines", readLines),
-                       ("read-file", readFile')]
+                       ("read-file", readFile')] ++ [("T", boolean True), ("F", boolean False)]
   
 typerPrelude :: Map.Map Text Type
 typerPrelude = Map.fromList list
@@ -37,7 +37,9 @@ typerPrelude = Map.fromList list
                   ("fold", foldType),
                   ("fold-back", foldType),
                   ("read-lines", readLinesType),
-                  ("read-file", readFileType)]
+                  ("read-file", readFileType),
+                  ("T", TBool),
+                  ("F", TBool)]
 
 aliasPrelude :: Map.Map Text Type
 aliasPrelude = Map.fromList list
@@ -76,6 +78,9 @@ foldType =
   (TForall $ AbstractionInfo (Name "B") StarK
    (TArrow (TArrow (TVariable (Name "A")) (TArrow (TVariable (Name "B")) (TVariable (Name "B")))) 
      (TArrow (TVariable (Name "B")) (TArrow (TList . TListInfo . Just $ TVariable (Name "A")) (TVariable (Name "B"))))))
+
+boolean :: Bool -> Value
+boolean = VLiteral . LBool
 
 car :: Value -> ResultT Value
 car (VList []) = fail "Can't apply 'car' function in empty lists"

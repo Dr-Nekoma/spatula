@@ -84,11 +84,6 @@ operatorP =
       operatorsP = choice $ fmap try (map (\x -> x <$ string (show x)) operators)
   in between openDelimiter closeDelimiter (EOperation <$> operatorsP <*> (many1 (skip *> expressionP) <* skip))
 
-boolean :: ParserT st Literal
-boolean = LBool <$> (true <|> false)
-   where true = True <$ char 'T'
-         false = False <$ char 'F'
-
 integer :: ParserT st Literal
 integer = readInteger <$> optionMaybe (string "-") <*> many1 digit
 
@@ -117,4 +112,4 @@ literalListP =
   in between (string "'[") closeDelimiter (EList . fromMaybe [] <$> (optionMaybe elements <* skip))
 
 literal :: ParserT st Literal
-literal = choice $ fmap try [unit, rational, integer, boolean, stringP]
+literal = choice $ fmap try [unit, rational, integer, stringP]

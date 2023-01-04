@@ -1,7 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
-module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..) ) where
+module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..), kindCheckWithEnvironment ) where
 
 import Types
     ( Type(..),
@@ -297,7 +297,9 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TRational -> pure StarK
     TBool -> pure StarK
     TString -> pure StarK
-    TAliasPlaceholder _ -> error "KIND ERROR: This should never happen. Something is broken in kind checking"
+    TAliasPlaceholder name ->
+      let kind = Map.lookup (Name name) kindContext in
+      maybe (throwError' $ printf "KIND ERROR: Unbound type alias %s in the environment." (show name)) return kind
     TAlias name _ -> 
       let kind = Map.lookup (Name name) kindContext in
       maybe (throwError' $ printf "KIND ERROR: Unbound type alias %s in the environment." (show name)) return kind

@@ -32,8 +32,10 @@ type Command = Either String (SpecialOption, Maybe String)
 data SpecialOption =
     Import
   | SType
+  | Kind
   | Parsed
   | Quit
+  | Env
   deriving (Enum, Bounded)
 
 class Options a where  
@@ -43,8 +45,10 @@ class Options a where
 instance Options SpecialOption where
   showOptions Import = (":import ", ":i ")
   showOptions SType = (":type ", ":t ")
+  showOptions Kind = (":kind ", ":k ")
   showOptions Quit = (":quit", ":q")
   showOptions Parsed = (":parse ", ":p ")
+  showOptions Env = (":env ", ":e")
   identifyOption str option = (option, msum $ sequence [stripPrefix long, stripPrefix short] str)
     where (long, short) = showOptions option
 
@@ -55,10 +59,10 @@ liftRepl :: IO a -> ReplT a
 liftRepl = lift . liftIO
 
 replError :: Text -> ReplT ()
-replError = liftRepl . TIO.putStrLn. addErrorColor
+replError = liftRepl . TIO.putStrLn . addErrorColor
 
 replSucess :: Text -> ReplT ()
-replSucess = liftRepl . TIO.putStrLn. addSuccessColor
+replSucess = liftRepl . TIO.putStrLn . addSuccessColor
 
 genericReplError :: Show a => a -> ReplT ()
 genericReplError = liftRepl . TIO.putStrLn . buildError
@@ -81,8 +85,13 @@ addDeclaration name body = do
          let newTyperEnv = Map.insert name t typerEnv
          put (TyperEnv newTyperEnv x y, Map.insert name v evalEnv)
     Right type' -> do
-      let newTyperEnv = Map.insert name type' typerEnv
-      put (TyperEnv newTyperEnv x y, evalEnv)
+      kind <- liftRepl . runExceptT $ kindCheckWithEnvironment (TyperEnv typerEnv x y) type'
+      case kind of
+        Left e -> genericReplError e
+        Right k -> do
+          let x' = Map.insert (Name name) k x
+              y' = Map.insert name type' y
+          put (TyperEnv typerEnv x' y', evalEnv)
 
 typeCheckEval :: Expression -> ReplT (Result (Type, Value))
 typeCheckEval expr = do
@@ -113,6 +122,22 @@ singleExecution content = do
           DeclFun name _ body -> addDeclaration name (Left body)
           DeclVal name body -> addDeclaration name (Left body)
           DeclType name type' -> addDeclaration name (Right type')
+
+getEnv :: ReplT ()
+getEnv = do
+   (typerEnv, evalEnv) <- get
+   genericReplSuccess typerEnv
+   genericReplSuccess ("----------------" :: String)
+   genericReplSuccess evalEnv
+
+getKind :: String -> ReplT ()
+getKind content = do
+  case parse typeP "" content of
+    Left errorParse -> error $ show errorParse
+    Right type' -> do
+      (typerEnv, _) <- get
+      kind <- liftRepl $ runExceptT (kindCheckWithEnvironment typerEnv type')
+      either replError genericReplSuccess kind
 
 getType :: String -> ReplT ()
 getType content = do
@@ -151,10 +176,12 @@ identifySpecialOption str =
   in maybeToEither str option
 
 executeSpecialOption :: SpecialOption -> String -> ReplT ()
-executeSpecialOption Quit _ = return ()
-executeSpecialOption Import remaining = executeCommand importFile remaining
-executeSpecialOption Parsed remaining = executeCommand getParsed remaining
-executeSpecialOption SType remaining = executeCommand getType remaining
+executeSpecialOption Quit = const $ return ()
+executeSpecialOption Import = executeCommand importFile
+executeSpecialOption Parsed = executeCommand getParsed
+executeSpecialOption SType = executeCommand getType 
+executeSpecialOption Kind = executeCommand getKind
+executeSpecialOption Env = executeCommand (const getEnv)
 
 flushRepl :: ReplT ()
 flushRepl = liftRepl $ hFlush stdout
