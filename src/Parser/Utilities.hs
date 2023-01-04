@@ -75,6 +75,8 @@ data Keyword =
   | LetIn
   | LetPlus
   | Progn
+  | RecordGet
+  | RecordSet
   deriving (Enum, Bounded)
 
 instance Show Keyword where
@@ -85,6 +87,8 @@ instance Show Keyword where
   show LetIn = "let-in"
   show LetPlus = "let+"
   show Progn = "progn"
+  show RecordGet = "getr"
+  show RecordSet = "setr"
 
 delimiters :: [String]
 delimiters = map show ([minBound .. maxBound] :: [Delimiter])
