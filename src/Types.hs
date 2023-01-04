@@ -238,6 +238,7 @@ data Declaration
     | DeclFun Text Type Expression
     | DeclVal Text Expression
     | DeclType Text Type
+    | DeclModule Text [Declaration]
     deriving (Generic, Eq)
 
 instance Arbitrary Declaration where
@@ -248,7 +249,8 @@ instance Show Declaration where
   show (DeclFun name type' expr) = "Function: " ++ unpack name ++ " : " ++ show type' ++ " = " ++ show expr
   show (DeclVal name literal) = "Value: " ++ unpack name ++ " = " ++ show literal
   show (DeclType name type') = "Type: " ++ unpack name ++ " = " ++ show type'
-
+  show (DeclModule name program) = "Module: " ++ unpack name
+  
 type Label = Text
 type Field = (Label, Expression)
 

@@ -14,33 +14,38 @@ import Text.Printf ( printf )
 import Control.Exception ( IOException, catch, throwIO )
 import System.IO.Error ( isDoesNotExistError )
 
-evaluatorPrelude :: Map.Map Text Value
-evaluatorPrelude = Map.fromList $
-                   map (fmap (VNativeFunction . NativeFunction))
-                     [ ("print", ourPrint),
-                       ("car", car),
-                       ("cdr", cdr),
-                       ("map", map'),
-                       ("filter", filter'),
-                       ("fold", fold' id),
-                       ("fold-back", fold' reverse),
-                       ("read-lines", readLines),
-                       ("read-file", readFile')] ++ [("T", boolean True), ("F", boolean False)]
+evaluatorPrelude :: Map.Map Text (Map.Map Text Value)
+evaluatorPrelude =
+  Map.fromList $
+  [("Prelude", Map.fromList $
+        map (fmap (VNativeFunction . NativeFunction))
+        [ ("print", ourPrint),
+          ("car", car),
+          ("cdr", cdr),
+          ("map", map'),
+          ("filter", filter'),
+          ("fold", fold' id),
+          ("fold-back", fold' reverse),
+          ("read-lines", readLines),
+          ("read-file", readFile')] ++ [("T", boolean True), ("F", boolean False)]])]
   
 typerPrelude :: Map.Map Text Type
-typerPrelude = Map.fromList list
-    where list = [("print", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TVariable (Name "T")) TUnit)),
-                  ("car", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TVariable (Name "T")))),
-                  ("cdr", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TList . TListInfo . Just $ TVariable (Name "T")))),
-                  ("map", mapType),
-                  ("filter", filterType),
-                  ("fold", foldType),
-                  ("fold-back", foldType),
-                  ("read-lines", readLinesType),
-                  ("read-file", readFileType),
-                  ("T", TBool),
-                  ("F", TBool)]
+typerPrelude =
+  Map.fromList $
+  [("Prelude", Map.fromList $ list)]
+  where list = [("print", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TVariable (Name "T")) TUnit)),
+                 ("car", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TVariable (Name "T")))),
+                 ("cdr", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TList . TListInfo . Just $ TVariable (Name "T")))),
+                 ("map", mapType),
+                 ("filter", filterType),
+                 ("fold", foldType),
+                 ("fold-back", foldType),
+                 ("read-lines", readLinesType),
+                 ("read-file", readFileType),
+                 ("T", TBool),
+                 ("F", TBool)]
 
+-- Consider adding it to the Prelude module as well
 aliasPrelude :: Map.Map Text Type
 aliasPrelude = Map.fromList list
   where list = [("String", TString),

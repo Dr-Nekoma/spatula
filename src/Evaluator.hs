@@ -55,6 +55,8 @@ internalZ = EAbstraction
                       (EVariable "x"))
                     (EVariable "v"))))
 
+-- This is wrong, we need to change EvalEnv to accept a Map [moduleName, Map[name, declaration]]
+-- merging the acc and so on
 evalDeclarations :: EvalEnv -> [Declaration] -> ResultT EvalEnv
 evalDeclarations _ [] = throwError' "DECLARATION ERROR: No declaration found to evaluate "
 evalDeclarations env list = foldM fun env list
@@ -64,6 +66,11 @@ evalDeclarations env list = foldM fun env list
              return $ Map.insert name value acc
         fun acc (DeclType _ _) =
           -- TODO add cases of a discriminated union to the context as functions
+          pure acc
+        fun acc (DeclModule name program) =
+          evaluatedDecls <- for program (evalDeclarations env)
+          let newModule = foldl (\acc (name, declr) -> Map.insert name declr acc) Map.empty evaluatedDecls
+          let newEnv = Map.union (Map.fromList [(name, newModule)]) acc
           pure acc
         fun acc (DeclFun name t expr) = do
           let zCombinator = EAbstraction "f" t Nothing (EApplication internalZ internalZ)
