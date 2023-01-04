@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Parser.Declarations where
 
+import Data.Text ( Text )
 import Types
 import Parser.Types
 import Parser.Expressions
@@ -12,7 +13,7 @@ fileP :: ParserT st [Declaration]
 fileP = manyTill (skip *> declarationP <* skip) eof
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [DeclExpr <$> expressionP, defunP, defvalP, defaliasP]
+declarationP = choice $ fmap try [defaliasP, defvalP, defunP, DeclExpr <$> expressionP]
 
 defvalP :: ParserT st Declaration
 defvalP = do
@@ -24,19 +25,26 @@ defvalP = do
 defaliasP :: ParserT st Declaration
 defaliasP = do
   openDelimiter *> skip *> string "defalias" <* skip
-  name <- variableGeneric <* skip <* char '=' <* skip
+  name <- variableGeneric <* skip
   type' <- typeP <* skip <* closeDelimiter <* skip
   pure $ DeclType name type'
 
+curriedArrow :: Curryable a => [a] -> a -> a
+curriedArrow types returnType = Prelude.foldr kurry returnType types 
+
+getFunType :: [Either (TVariableInfo, Kind) (Text, Type)] -> Type -> Type
+getFunType args returnType =
+  let fun (Left (i, k)) acc = TForall $ AbstractionInfo i k acc 
+      fun (Right (_, t)) acc = TArrow t acc
+      first = case Prelude.last args of
+                Left (lastText, lastKind) -> TForall $ AbstractionInfo lastText lastKind returnType
+                Right (_, lastType) -> TArrow lastType returnType
+  in Prelude.foldr fun first (Prelude.init args)
+
 defunP :: ParserT st Declaration
 defunP = do
-  let couples = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (typeP <* skip <* char ')' <* skip)
-  openDelimiter *> skip *> string "defun" <* skip
+  _ <- openDelimiter *> skip *> string "defun" <* skip
   name <- variableGeneric <* skip
-  args <- openDelimiter *> many1 (skip *> couples) <* closeDelimiter <* skip
+  args <- arguments
   (returnType, body) <- (,) <$> (skip *> char ':' *> skip *> typeP <* skip) <*> many1 (expressionP <* skip) <* closeDelimiter <* skip
-  let fun = ($ Nothing) . uncurry EAbstraction
-      first = (\(lastText, lastType) -> EAbstraction lastText lastType (Just returnType) (EProgn body)) $ Prelude.last args
-      funBody = Prelude.foldr fun first (Prelude.init args)
-      (_, types) = unzip args
-  pure $ DeclFun name (curriedArrow types returnType) funBody
+  pure $ DeclFun name (getFunType args returnType) (foldArgs args (Just returnType) body)

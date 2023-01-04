@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
-module SWPrelude ( evaluatorPrelude, typerPrelude ) where
+module SWPrelude ( evaluatorPrelude, typerPrelude, aliasPrelude, kindPrelude ) where
 
 import Types
 import qualified Data.Map as Map
@@ -38,6 +38,17 @@ typerPrelude = Map.fromList list
                   ("fold-back", foldType),
                   ("read-lines", readLinesType),
                   ("read-file", readFileType)]
+
+aliasPrelude :: Map.Map Text Type
+aliasPrelude = Map.fromList list
+  where list = [("String", TString),
+                ("Integer", TInteger),
+                ("Unit", TUnit),
+                ("Rational", TRational),
+                ("List", TAbstraction (AbstractionInfo (Name "T") StarK (TList . TListInfo . Just $ TVariable (Name "T"))))]
+
+kindPrelude :: Map.Map TVariableInfo Kind
+kindPrelude = Map.fromList [(Name "String", StarK), (Name "Integer", StarK), (Name "Unit", StarK), (Name "Rational", StarK), (Name "List", ArrowK StarK StarK)]
 
 readLinesType :: Type
 readLinesType =

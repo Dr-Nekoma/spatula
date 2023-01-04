@@ -100,6 +100,7 @@ instance Eq AbstractionInfo where
 
 -- TODO Test if you can pass the type of the list to something
 -- When type aliases are added we should include type alias for list that returns the List|T| type
+-- Do we still need the maybe type here? Consider that we are implementing the type list using type alias
 data TListInfo = TListInfo (Maybe Type)
   deriving (Generic)
 
@@ -163,10 +164,10 @@ instance Show Type where
   show (TArrow source target) = printf "%s -> %s" (show source) (show target)
   show (TVariable label) = unpack $ extractName label
   show (TForall info) = "forall " ++ show info
-  show (TApplication fun arg) = printf "%s %s" (show fun) (show arg)
+  show (TApplication fun arg) = printf "%s <- %s" (show fun) (show arg)
   show (TAbstraction (AbstractionInfo label kind type')) = printf "lambda %s : %s -> %s" (unpack $ extractName label) (show kind) (show type')
   show (TAlias name type') = "Alias " ++ unpack name ++ " for type " ++ show type'
-  show (TAliasPlaceHolder name) = "This is an alias placeholder " ++ unpack name
+  show (TAliasPlaceHolder name) = "AliasP : " ++ unpack name
   show (TAnonymusRecord []) = printf "| Anonymus Record | EMPTY"
   show (TAnonymusRecord list) = go "| Anonymus Record |\n" list
     where go acc [] = acc

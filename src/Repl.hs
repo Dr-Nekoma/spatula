@@ -172,7 +172,7 @@ insertion = do
         _ -> error "This should be impossible"
 
 runReplT :: IO ((), (TyperEnv, EvalEnv))
-runReplT = runInputT defaultSettings $ runStateT insertion (TyperEnv typerPrelude Map.empty Map.empty, evaluatorPrelude)
+runReplT = runInputT defaultSettings $ runStateT insertion (TyperEnv typerPrelude kindPrelude aliasPrelude, evaluatorPrelude)
 
 repl :: IO ()
 repl = void runReplT

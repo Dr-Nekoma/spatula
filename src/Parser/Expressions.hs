@@ -5,7 +5,7 @@ import Types
 import Parser.Utilities --( ParserT, variableGeneric, typeVariableGeneric, openDelimiter, closeDelimiter )
 import Parser.Types
 import Parser.Kinds
-import Data.Text (pack)
+import Data.Text (Text, pack)
 import Text.Parsec
     ( char, string, optionMaybe, (<|>), many, many1, between, parserFail, choice, try, digit, eof, manyTill, anyChar )
 import Data.Maybe ( fromMaybe )
@@ -18,7 +18,7 @@ exprVariable = EVariable <$> variableGeneric
 
 exprApplication :: ParserT st Expression
 exprApplication = do
-  content <- between openDelimiter closeDelimiter (many1 (skip *> (fmap Left typeP <|> fmap Right expressionP) <* skip))
+  content <- between openDelimiter closeDelimiter (many1 (skip *> (fmap Left typeApplied <|> fmap Right expressionP) <* skip))
   let function acc = either (ETypeApplication acc) (EApplication acc)
   case content of
     [single] -> case single of
@@ -38,18 +38,26 @@ exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <*> expr <* closeDelimiter
   where expr = skip *> expressionP <* skip
 
+arguments :: ParserT st [Either (TVariableInfo, Kind) (Text, Type)]
+arguments = 
+  let argAnd a = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (a <* skip <* char ')' <* skip)
+  in openDelimiter *> many (choice $ fmap try [fmap (\(a,b) -> Left (Name a, b)) (argAnd kindP), fmap Right (argAnd typeP)]) <* closeDelimiter
+
+foldArgs :: [Either (TVariableInfo, Kind) (Text, Type)] -> Maybe Type -> [Expression] -> Expression
+foldArgs args returnType body =
+  let fun (Left item) = ($ Nothing) . uncurry ETypeAbstraction $ item
+      fun (Right item) = ($ Nothing) . uncurry EAbstraction $ item
+      first = case Prelude.last args of
+                Left (lastText, lastType) -> ETypeAbstraction lastText lastType returnType (EProgn body)
+                Right (lastText, lastKind) -> EAbstraction lastText lastKind returnType (EProgn body)
+  in Prelude.foldr fun first (Prelude.init args)
+  
 exprAbstraction :: ParserT st Expression
 exprAbstraction = do
   openDelimiter *> string "lambda" *> skip
-  let argAnd a = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (a <* skip <* char ')' <* skip)
-  args <- openDelimiter *> many (fmap Left (argAnd typeP) <|> fmap (\(a,b) -> Right (Name a, b)) (argAnd kindP)) <* closeDelimiter
+  args <- arguments
   (returnType, body) <- (,) <$> (skip *> optionMaybe (skip *> char ':' *> skip *> typeP <* skip)) <*> many1 (expressionP <* skip) <* closeDelimiter
-  let fun (Right item) = ($ Nothing) . uncurry ETypeAbstraction $ item
-      fun (Left item) = ($ Nothing) . uncurry EAbstraction $ item
-      first = case Prelude.last args of
-                Left (lastText, lastType) -> EAbstraction lastText lastType returnType (EProgn body)
-                Right (lastText, lastKind) -> ETypeAbstraction lastText lastKind returnType (EProgn body)
-  pure $ Prelude.foldr fun first (Prelude.init args)
+  pure $ foldArgs args returnType body
 
 prognP :: ParserT st Expression
 prognP = do

@@ -33,6 +33,17 @@ data TyperEnv = TyperEnv
   } deriving (Eq, Show)
 
 -- TODO: We should have warnings if expressions are returning something other than unit
+
+{-
+Right now we are following Fsharp and OCaml way of making type aliases, a.k.a, the order does matter.
+
+type a = string (* Initial type alias type *)
+  
+let x: a = "nathan" (* x is a string *)
+  
+type a = int (* After this x is still a string *)
+-}
+
 typeCheckDeclarations :: TyperEnv -> [Declaration] -> ResultT TyperEnv
 typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations found to type check"
 typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
@@ -40,20 +51,22 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
         fun acc@TyperEnv{..} (DeclVal name value) =
           do type' <- typeCheckExpression acc value
              return $ acc { variableTypes = Map.insert name type' variableTypes}
-        fun acc@TyperEnv{..} (DeclType name type') = do
+        fun acc@TyperEnv{..} (DeclType name t) = do
+          type' <- findPlaceHolderAlias acc t
           kind <- kindCheckWithEnvironment acc type'
           pure $ acc { kindContext = Map.insert (Name name) kind kindContext
                      , aliasContext = Map.insert name type' aliasContext }
         fun acc@TyperEnv{..} (DeclFun name expectedType expr) =
-          do kind <- kindCheckWithEnvironment acc expectedType
+          do type' <- findPlaceHolderAlias acc expectedType
+             kind <- kindCheckWithEnvironment acc type'
              case kind of
                StarK -> do
-                let newEnv = acc { variableTypes = Map.insert name expectedType variableTypes}
-                type' <- typeCheckExpression newEnv expr      
-                if reduceType type' == reduceType expectedType
+                let newEnv = acc { variableTypes = Map.insert name type' variableTypes}
+                t <- typeCheckExpression newEnv expr      
+                if reduceType t == reduceType type'
                 then return newEnv
-                else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show expectedType) (show type')
-               other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show expectedType) (show other)
+                else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show type') (show type')
+               other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show type') (show other)
 
 findPlaceHolderAlias :: TyperEnv -> Type -> ResultT Type
 findPlaceHolderAlias TyperEnv{..} (TAliasPlaceHolder name) =
@@ -78,7 +91,20 @@ findPlaceHolderAlias env (TAnonymusRecord typedNames) = do
   let (names, types) = unzip typedNames
   ts <- for types (findPlaceHolderAlias env)
   pure . TAnonymusRecord $ zip names ts
-findPlaceHolderAlias _ t = pure t 
+findPlaceHolderAlias _ TUnit = pure TUnit
+findPlaceHolderAlias _ TInteger = pure TInteger
+findPlaceHolderAlias _ TRational = pure TRational
+findPlaceHolderAlias _ TBool = pure TBool
+findPlaceHolderAlias _ TString = pure TString
+findPlaceHolderAlias _ (TList v) = pure (TList v)
+findPlaceHolderAlias _ (TVariable v) = pure (TVariable v)
+findPlaceHolderAlias env (TAlias name type') = do
+  t' <- findPlaceHolderAlias env type'
+  pure $ TAlias name t'
+findPlaceHolderAlias env (TAlgebraic typedNames) = do
+  let (names, types) = unzip typedNames
+  ts <- mapM (\ts -> for ts (findPlaceHolderAlias env)) types
+  pure . TAlgebraic $ zip names ts
 
 typeCheckExpression :: TyperEnv -> Expression -> ResultT Type
 typeCheckExpression env (EList list) = do
@@ -127,20 +153,22 @@ typeCheckExpression env@TyperEnv{..} (ELet Plus ((label, expr):xs) body) = do
   typeCheckExpression (env { variableTypes = Map.insert label typedExpression variableTypes}) (ELet Plus xs body)
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
-typeCheckExpression env@TyperEnv{..} (EAbstraction label type' returnType expression) = do
+typeCheckExpression env@TyperEnv{..} (EAbstraction label t returnType expression) = do
+  type' <- findPlaceHolderAlias env t
   parameterKind <- kindCheckWithEnvironment env type'
   case parameterKind of 
     StarK -> do 
       let newEnv = env { variableTypes = Map.insert label type' variableTypes }
       resultType <- typeCheckExpression newEnv expression
       case returnType of
-        Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment env rt
+        Just rt -> do potentialAlias <- findPlaceHolderAlias env rt
+                      annotatedReturnKind <- kindCheckWithEnvironment env potentialAlias
                       case annotatedReturnKind of
-                        StarK -> do let reducedAnnotatedType = reduceType rt
+                        StarK -> do let reducedAnnotatedType = reduceType potentialAlias
                                         reducedResultType = reduceType resultType
                                     if reducedAnnotatedType == reducedResultType
-                                    then pure $ TArrow type' rt
-                                    else throwError' $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+                                    then pure $ TArrow type' potentialAlias
+                                    else throwError' $ printf "TYPE ERROR 1: Body type %s does not match annotated return type %s." (show potentialAlias) (show resultType)
                         other -> throwError' $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
         Nothing -> pure $ TArrow type' resultType
     other -> throwError' $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
@@ -175,13 +203,14 @@ typeCheckExpression env@TyperEnv{..} (ETypeAbstraction label kind returnType bod
   let newKindEnv = env { kindContext = Map.insert label kind kindContext }
   resultType <- typeCheckExpression newKindEnv body
   case returnType of
-    Just rt -> do annotatedReturnKind <- kindCheckWithEnvironment newKindEnv rt
+    Just rt -> do potentialAlias <- findPlaceHolderAlias env rt
+                  annotatedReturnKind <- kindCheckWithEnvironment newKindEnv potentialAlias
                   case annotatedReturnKind of
-                    StarK -> do let reducedAnnotatedType = reduceType rt
+                    StarK -> do let reducedAnnotatedType = reduceType potentialAlias
                                     reducedResultType = reduceType resultType
                                 if reducedAnnotatedType == reducedResultType
-                                then pure $ TForall $ AbstractionInfo label kind rt
-                                else throwError' $ printf "TYPE ERROR: Body type %s does not match annotated return type %s." (show rt) (show returnType)
+                                then pure $ TForall $ AbstractionInfo label kind potentialAlias
+                                else throwError' $ printf "TYPE ERROR 2: Body type %s does not match annotated return type %s." (show potentialAlias) (show resultType)
                     other -> throwError' $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
     Nothing -> pure $ TForall $ AbstractionInfo label kind resultType
 
@@ -189,9 +218,10 @@ typeCheckExpression env (ETypeApplication expr type') = do
   reducedFunctionType <- reduceType <$> typeCheckExpression env expr
   case reducedFunctionType of
     TForall (AbstractionInfo identifier kind bodyType) -> do
-     expectedKind <- kindCheckWithEnvironment env type'
+     potentialAlias <- findPlaceHolderAlias env type'
+     expectedKind <- kindCheckWithEnvironment env potentialAlias
      if kind == expectedKind
-       then pure $ typeSubstitution identifier type' bodyType
+       then pure $ typeSubstitution identifier potentialAlias bodyType
        else throwError' $ printf "KIND ERROR: Expected kind %s for type application does not match with %s." (show expectedKind) (show kind)
     _ -> throwError' $ printf "TYPE ERROR: Cannot do a type application with a value of type %s that is not a type abstraction." (show reducedFunctionType)
     
@@ -240,46 +270,46 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TRational -> pure StarK
     TBool -> pure StarK
     TString -> pure StarK
-    TAliasPlaceHolder _ -> error "This should never happen. Something is broken in kind checking"
+    TAliasPlaceHolder _ -> error "KIND ERROR: This should never happen. Something is broken in kind checking"
     TAlias name _ -> 
       let kind = Map.lookup (Name name) kindContext in
-      maybe (throwError' $ printf "Unbound type alias %s in the environment." (show name)) return kind
+      maybe (throwError' $ printf "KIND ERROR: Unbound type alias %s in the environment." (show name)) return kind
     TAnonymusRecord fields -> do
       let ifStar StarK = True
           ifStar _ = False
       internalKinds <- for (map snd fields) (kindCheckWithEnvironment env)
       if all ifStar internalKinds
       then pure StarK
-      else throwError' "Internal types of fields should have kind *."
+      else throwError' "KIND ERROR: Internal types of fields should have kind *."
     TList (TListInfo Nothing) -> pure StarK
     TList (TListInfo (Just x)) -> do
       internalKind <- kindCheckWithEnvironment env x
       case internalKind of
         StarK -> pure StarK
-        other -> throwError' $ printf "Internal types of lists should have kind * and this has %s" (show other)
+        other -> throwError' $ printf "KIND ERROR: Internal types of lists should have kind * and this has %s" (show other)
     TVariable label ->
       let kind = Map.lookup label kindContext in
-      maybe (throwError' $ printf "Unbound type variable %s in the environment." (show label)) return kind
+      maybe (throwError' $ printf "KIND ERROR: Unbound type variable %s in the environment." (show label)) return kind
     TArrow input output -> do
       kindInput <- kindCheckWithEnvironment env input
       kindOutput <- kindCheckWithEnvironment env output
       case (kindInput, kindOutput) of
         (StarK, StarK) -> pure StarK
-        (left, right) -> throwError' $ printf "Expression arrow must have kind * -> * and it has %s -> %s." (show left) (show right)
+        (left, right) -> throwError' $ printf "KIND ERROR: Expression arrow must have kind * -> * and it has %s -> %s." (show left) (show right)
     TForall (AbstractionInfo identifier kind bodyType) -> do
        let newEnv = Map.insert identifier kind kindContext
        kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType
        case kindBody of
         StarK -> pure StarK
-        kind' -> throwError' $ printf "Foralls should return * but this has %s." (show kind')
+        kind' -> throwError' $ printf "KIND ERROR: Foralls should return * but this has %s." (show kind')
     TApplication abstractionType argumentType -> do
       kindAbs <- kindCheckWithEnvironment env abstractionType
       kindArg <- kindCheckWithEnvironment env argumentType
       case kindAbs of
         (ArrowK k1 k2) -> if k1 == kindArg
                           then pure k2
-                          else throwError' $ printf "Kind argument %s does not match expected kind %s." (show kindArg) (show k1) 
-        kind' -> throwError' $ printf "Type abstraction of kind %s is not a arrow kind" (show kind')
+                          else throwError' $ printf "KIND ERROR: Kind argument %s does not match expected kind %s." (show kindArg) (show k1) 
+        kind' -> throwError' $ printf "KIND ERROR: Type abstraction of kind %s is not a arrow kind" (show kind')
     TAbstraction (AbstractionInfo label kind bodyType) -> do
       let newEnv = Map.insert label kind kindContext
       kindBody <- kindCheckWithEnvironment (env {kindContext = newEnv}) bodyType

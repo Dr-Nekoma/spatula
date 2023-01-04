@@ -28,11 +28,13 @@
 	   [ghj def]]
 	[+ abc def]]
 
--- Unzip bindings
--- Pick expression and evaluate considering
---  - Or you halt. If that's the case back track to try again the hanging ones
---  - Or you stop at a point of having to use something that is not in the environment. Save that and skip
--- If at the end you have hanging ones, then throw error
+{;
+ Unzip bindings
+ Pick expression and evaluate considering
+  - Or you halt. If that's the case back track to try again the hanging ones
+  - Or you stop at a point of having to use something that is not in the environment. Save that and skip
+ If at the end you have hanging ones, then throw error
+;} 
 
 [let* [[abc 1]]
 	[let* [[abc ghj]

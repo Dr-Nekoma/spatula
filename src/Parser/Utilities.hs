@@ -19,7 +19,7 @@ import Text.Parsec
 import Data.Set ( Set, fromList, member )
 import Data.Text ( Text, pack )
 import Data.Char ( isAlphaNum, isSymbol, isAscii )
-import Types ( Curryable(..), Operator(..), TVariableInfo(..) )
+import Types
 import Control.Monad
 
 type ParserT st = Parsec [Char] st

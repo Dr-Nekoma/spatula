@@ -33,7 +33,7 @@ fullExecution content = do
                          Right _ -> return ()
                                
 typerInitialEnv :: TyperEnv
-typerInitialEnv = TyperEnv typerPrelude Map.empty Map.empty
+typerInitialEnv = TyperEnv typerPrelude kindPrelude aliasPrelude
 
 differTyperEnv :: TyperEnv -> TyperEnv -> TyperEnv
 differTyperEnv (TyperEnv x y z) (TyperEnv a _ _) = TyperEnv (Map.difference x a) y z
@@ -63,4 +63,4 @@ main = do
                     (runExceptT (typeCheckDeclarations typerInitialEnv asts) >>= printMessage . fmap (`differTyperEnv` typerInitialEnv))
                   when
                     justEvaluate
-                    (putStrLn "\ESC[91m- YOU ARE CRAZY -" >> runExceptT (evalDeclarations evaluatorPrelude asts) >>= printMessage . fmap (`Map.difference` evaluatorPrelude))
+                    (putStrLn "\ESC[91m- YOU ARE CRAZY - \ESC[00m" >> runExceptT (evalDeclarations evaluatorPrelude asts) >>= printMessage . fmap (`Map.difference` evaluatorPrelude))
