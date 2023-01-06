@@ -18,13 +18,14 @@ jobs:
     - name: Nix Build
       run: |
         nix build
-    - run: echo "UPLOAD_PATH=$(readlink -f result)" >> $GITHUB_ENV
-    - name: Cache Binary
-      id: cache-bin
-      uses: actions/cache@v3
+    # NOTE: Workaround for this issue: https://github.com/actions/upload-artifact/issues/92
+    - name: "Copy binary artifacts"
+      run: "mkdir build && cp -r result/* build/ && chmod +w -R build/ && chmod +x build/bin"
+    - name: "Upload artifact to github"
+      uses: actions/upload-artifact@v3
       with:
-        path: "${{ env.UPLOAD_PATH }}/bin/spatula-exe"
-        key: ${{ runner.os }}-spatula-exe
+        name: spatula-bin
+        path: build/bin
 
   test-bin:
     runs-on: ubuntu-latest
@@ -41,10 +42,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - uses: actions/cache@v3
+    - uses: actions/download-artifact@v3
       with:
-        path: "${{ env.UPLOAD_PATH }}/bin/spatula-exe"
-        key: ${{ runner.os }}-spatula-exe
+        name: spatula-bin
+        path: build/bin
     - name: Run binaries
       run: |
-        ${{ env.UPLOAD_PATH }}/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
+        build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
