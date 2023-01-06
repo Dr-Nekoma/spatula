@@ -23,8 +23,8 @@ jobs:
       id: cache-bin
       uses: actions/cache@v3
       with:
-        path: "${{ env.UPLOAD_PATH }}"
-        key: spatula-exe
+        path: "${{ env.UPLOAD_PATH }}/bin/spatula-exe"
+        key: ${{ runner.os }}-spatula-exe
 
   test-bin:
     runs-on: ubuntu-latest
@@ -43,8 +43,8 @@ jobs:
     - uses: actions/checkout@v3
     - uses: actions/cache@v3
       with:
-        path: "${{ env.UPLOAD_PATH }}"
-        key: spatula-exe
+        path: "${{ env.UPLOAD_PATH }}/bin/spatula-exe"
+        key: ${{ runner.os }}-spatula-exe
     - name: Run binaries
       run: |
         ${{ env.UPLOAD_PATH }}/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
