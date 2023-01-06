@@ -53,7 +53,7 @@ jobs:
         path: spatula.tar.gz
     - name: Run binaries
       run: |
-        tar -tf spatula.tar.gz
+        tar tf spatula.tar.gz
         tar xvzf spatula.tar.gz
         ls -lah
         ./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
