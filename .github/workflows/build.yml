@@ -18,14 +18,17 @@ jobs:
     - name: Nix Build
       run: |
         nix build
-    # NOTE: Workaround for this issue: https://github.com/actions/upload-artifact/issues/92
+    # NOTE: Workaround for this issue https://github.com/actions/upload-artifact/issues/92
     - name: "Copy binary artifacts"
-      run: "mkdir build && cp -r result/* build/ && chmod +w -R build/ && chmod +x -R build/bin"
+      run: "mkdir build && cp -r result/* build/ && chmod +w -R build/ && chmod +x build/bin/spatula-exe"
+    # NOTE: Another workaround https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
+    - name: Tar files
+      run: tar -cvf spatula.tar build/bin
     - name: "Upload artifact to github"
       uses: actions/upload-artifact@v3
       with:
-        name: spatula-bin
-        path: build/bin
+        name: spatula-tar
+        path: spatula.tar
 
   test-bin:
     runs-on: ubuntu-latest
@@ -44,8 +47,10 @@ jobs:
     - uses: actions/checkout@v3
     - uses: actions/download-artifact@v3
       with:
-        name: spatula-bin
-        path: build/bin
+        name: spatula-tar
+        path: spatula.tar
     - name: Run binaries
       run: |
+        tar xvf spatula.tar
+        ls -lah
         build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
