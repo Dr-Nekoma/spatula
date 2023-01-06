@@ -19,11 +19,14 @@ jobs:
       run: |
         nix build
     # NOTE: Workaround for this issue https://github.com/actions/upload-artifact/issues/92
-    - name: "Copy binary artifacts"
-      run: "mkdir build && cp -r result/* build/ && chmod +w -R build/ && chmod +x build/bin/spatula-exe"
+    - name: Copy binary artifacts
+      run: |
+        mkdir build && cp -r result/* build/ && chmod +w -R build/
+        chmod 744 build/bin/spatula-exe
+        cp build/bin/spatula-exe .
     # NOTE: Another workaround https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
     - name: Tar files
-      run: tar -cvf spatula.tar build/bin/spatula-exe
+      run: tar -cvf spatula.tar spatula-exe
     - name: "Upload artifact to github"
       uses: actions/upload-artifact@v3
       with:
