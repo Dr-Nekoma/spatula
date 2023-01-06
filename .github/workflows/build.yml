@@ -25,7 +25,7 @@ jobs:
         chmod 744 build/bin/spatula-exe
     # NOTE: Another workaround https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
     - name: Tar files
-      run: tar -cvzf spatula.tar.gz build/bin
+      run: tar cvf spatula.tar build/bin
     - name: "Upload artifact to github"
       uses: actions/upload-artifact@v3
       with:
@@ -53,7 +53,6 @@ jobs:
         path: spatula.tar.gz
     - name: Run binaries
       run: |
-        tar tf spatula.tar.gz
-        tar xvzf spatula.tar.gz
+        tar xvf spatula.tar
         ls -lah
         ./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
