@@ -53,9 +53,11 @@ jobs:
       with:
         name: spatula-tar
         path: spatula.tar
+    - name: Install deps
+      run: sudo apt -y install unar
     - name: Run binaries
       run: |
         ls -lah
-        tar xvf spatula.tar
+        unar spatula.tar
         ls -lah
         ./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
