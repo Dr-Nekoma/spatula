@@ -30,7 +30,7 @@ jobs:
       uses: actions/upload-artifact@v3
       with:
         name: spatula-tar
-        path: spatula.tar.gz
+        path: spatula.tar
 
   test-bin:
     runs-on: ubuntu-latest
@@ -50,7 +50,7 @@ jobs:
     - uses: actions/download-artifact@v3
       with:
         name: spatula-tar
-        path: spatula.tar.gz
+        path: spatula.tar
     - name: Run binaries
       run: |
         tar xvf spatula.tar
