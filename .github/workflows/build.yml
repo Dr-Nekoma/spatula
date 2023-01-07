@@ -13,8 +13,8 @@ jobs:
     - uses: actions/checkout@v3
     - uses: cachix/install-nix-action@v18
       with:
-        extra_nix_config: |
-          access-tokens = github.com=${{ secrets.GITHUB_TOKEN }}
+        nix_path: nixpkgs=channel:nixos-unstable
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
     - name: Nix Build
       run: |
         nix build
@@ -27,7 +27,7 @@ jobs:
     - name: Tar files
       run: tar cvf spatula.tar build/bin
     - name: "Upload artifact to github"
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v2
       with:
         name: spatula-tar
         path: spatula.tar
@@ -45,11 +45,11 @@ jobs:
         example: [ADT,Alias,Comment,Factorial,Filter,Fold,Forall,Functions,Funs,Fun,IO,List,Map,Multiple,Print,Progn,Read,Record,Sum]
         excluded:
           # Add any examples that are not fully supported here
-          - example: ADT
+          - example: [ADT]
 
     steps:
     - uses: actions/checkout@v3
-    - uses: actions/download-artifact@v3
+    - uses: actions/download-artifact@v2
       with:
         name: spatula-tar
         path: spatula.tar
