@@ -27,7 +27,7 @@ fullExecution content = do
         typeEnv' <- runExceptT $ typeCheckDeclarations typerInitialEnv decls
         case typeEnv' of
          Left errorType -> TIO.putStrLn $ "\ESC[91m" <> errorType
-         Right _ -> do evalEnv' <- runExceptT $ evalDeclarations evaluatorPrelude decls
+         Right _ -> do evalEnv' <- runExceptT $ evalDeclarations evaluatorPrelude decls id
                        case evalEnv' of
                          Left errorEvaluator -> TIO.putStrLn $ "\ESC[91m" <> errorEvaluator
                          Right _ -> return ()
@@ -63,4 +63,4 @@ main = do
                     (runExceptT (typeCheckDeclarations typerInitialEnv asts) >>= printMessage . fmap (`differTyperEnv` typerInitialEnv))
                   when
                     justEvaluate
-                    (putStrLn "\ESC[91m- YOU ARE CRAZY - \ESC[00m" >> runExceptT (evalDeclarations evaluatorPrelude asts) >>= printMessage . fmap (`Map.difference` evaluatorPrelude))
+                    (putStrLn "\ESC[91m- YOU ARE CRAZY - \ESC[00m" >> runExceptT (evalDeclarations evaluatorPrelude asts id) >>= printMessage . fmap (`Map.difference` evaluatorPrelude))

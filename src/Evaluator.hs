@@ -1,9 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 module Evaluator ( evalDeclarations, eval, Value(..), NativeFunction(..), EvalEnv, evalExpression ) where
 
 import Types
 import qualified Data.Map as Map
-import Data.Text ( unpack, Text )
+import Data.Text ( unpack, Text, append )
 import Utils ( ResultT, throwError' )
 import Text.Printf ( printf )
 import Data.Traversable
@@ -55,24 +56,32 @@ internalZ = EAbstraction
                       (EVariable "x"))
                     (EVariable "v"))))
 
-evalDeclarations :: EvalEnv -> [Declaration] -> ResultT EvalEnv
-evalDeclarations _ [] = throwError' "DECLARATION ERROR: No declaration found to evaluate "
-evalDeclarations env list = foldM fun env list
-  where fun acc (DeclExpr expr) = evalExpression acc expr >> return acc
-        fun acc (DeclVal name value) =
-          do value <- evalExpression acc value
-             return $ Map.insert name value acc
-        fun acc (DeclType _ _) =
+renameDeclaration :: Text -> Declaration -> Declaration
+renameDeclaration _ (DeclExpr expr) = DeclExpr expr
+renameDeclaration toAppend (DeclVal name value) = DeclVal (append toAppend name) value
+renameDeclaration toAppend (DeclType name t) = DeclType (append toAppend name) t
+renameDeclaration toAppend (DeclFun name t expr) = DeclFun (append toAppend name) t expr
+renameDeclaration toAppend (DeclModule name decls) = DeclModule (append toAppend name) decls
+
+evalDeclarations :: EvalEnv -> [Declaration] -> (Declaration -> Declaration) -> ResultT EvalEnv
+evalDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declaration found to evaluate "
+evalDeclarations env list callback = foldM fun env list
+  where fun acc (callback -> (DeclExpr expr)) = evalExpression acc expr >> return acc
+        fun acc (callback -> (DeclVal name value)) =
+          do v <- evalExpression acc value
+             return $ Map.insert name v acc
+        fun acc (callback -> (DeclType _ _)) =
           -- TODO add cases of a discriminated union to the context as functions
           pure acc
-        fun acc (DeclFun name t expr) = do
+        fun acc (callback -> (DeclFun name t expr)) = do
           let zCombinator = EAbstraction "f" t Nothing (EApplication internalZ internalZ)
               newExpr = EApplication zCombinator (EAbstraction name t Nothing expr)
           value <- evalExpression acc newExpr
           return $ Map.insert name value acc
+        fun acc (callback -> (DeclModule name decls)) = do
+          evalDeclarations acc decls (renameDeclaration (append name ":"))
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
-
 
 -- TODO: add a sortBy so we can have record value equality
 evalExpression env (EAnonymousRecord fields) = do

@@ -14,7 +14,7 @@ fileP :: ParserT st [Declaration]
 fileP = manyTill (skip *> declarationP <* skip) eof
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [defaliasP, defvalP, defunP, DeclExpr <$> expressionP]
+declarationP = choice $ fmap try [defaliasP, defvalP, defunP, defmoduleP, DeclExpr <$> expressionP]
 
 defvalP :: ParserT st Declaration
 defvalP = do
@@ -56,3 +56,10 @@ defunP = do
   args <- arguments
   (returnType, body) <- (,) <$> (skip *> char ':' *> skip *> typeP <* skip) <*> many1 (expressionP <* skip) <* closeDelimiter <* skip
   pure $ DeclFun name (getFunType args returnType) (foldArgs args (Just returnType) body)
+
+defmoduleP :: ParserT st Declaration
+defmoduleP = do
+  _ <- openDelimiter *> skip *> string "defmodule" <* skip
+  name <- variableGeneric <* skip
+  decls <- many (skip *> declarationP <* skip) <* closeDelimiter
+  pure $ DeclModule name decls

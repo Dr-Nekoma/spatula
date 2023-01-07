@@ -70,6 +70,8 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
                 then return newEnv
                 else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show type') (show type')
                other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show type') (show other)
+        fun acc@TyperEnv{..} (DeclModule name decls) = undefined
+
 
 findPlaceholderAlias :: TyperEnv -> Type -> ResultT Type
 findPlaceholderAlias TyperEnv{..} (TAliasPlaceholder name) =
