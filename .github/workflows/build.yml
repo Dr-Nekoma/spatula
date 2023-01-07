@@ -27,7 +27,7 @@ jobs:
     - name: Tar files
       run: tar cvf spatula.tar build/bin
     - name: "Upload artifact to github"
-      uses: actions/upload-artifact@v2
+      uses: actions/upload-artifact@v3
       with:
         name: spatula-tar
         path: spatula.tar
@@ -53,11 +53,8 @@ jobs:
       with:
         name: spatula-tar
         path: spatula.tar
-    - name: Install deps
-      run: sudo apt -y install unar
     - name: Run binaries
       run: |
         ls -lah
-        unar spatula.tar
-        ls -lah
+        tar cvf spatula.tar build/bin
         ./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
