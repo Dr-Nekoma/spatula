@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..), kindCheckWithEnvironment, findPlaceholderAlias ) where
 
 import Types
@@ -15,9 +16,10 @@ import Types
       Operator(..),
       typeSubstitution,
       extractName,
+      renameDeclaration,
       AbstractionInfo(AbstractionInfo) )
 import Data.List ( find, sortBy )
-import Data.Text (pack, Text, unpack)
+import Data.Text (pack, Text, unpack, append)
 import Text.Printf ( printf )
 import Utils ( ResultT, throwError' )
 import Data.Traversable
@@ -47,19 +49,19 @@ let x: a = "nathan" (* x is a string *)
 type a = int (* After this x is still a string *)
 -}
 
-typeCheckDeclarations :: TyperEnv -> [Declaration] -> ResultT TyperEnv
-typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations found to type check"
-typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
-  where fun acc (DeclExpr expr) = typeCheckExpression acc expr >> return acc
-        fun acc@TyperEnv{..} (DeclVal name value) =
+typeCheckDeclarations :: TyperEnv -> [Declaration] -> (Declaration -> Declaration) -> ResultT TyperEnv
+typeCheckDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declarations found to type check"
+typeCheckDeclarations env@TyperEnv{} list callback = foldM fun env list
+  where fun acc (callback -> (DeclExpr expr)) = typeCheckExpression acc expr >> return acc
+        fun acc@TyperEnv{..} (callback -> (DeclVal name value)) =
           do type' <- typeCheckExpression acc value
              return $ acc { variableTypes = Map.insert name type' variableTypes}
-        fun acc@TyperEnv{..} (DeclType name t) = do
+        fun acc@TyperEnv{..} (callback -> (DeclType name t)) = do
           type' <- findPlaceholderAlias acc t
           kind <- kindCheckWithEnvironment acc type'
           pure $ acc { kindContext = Map.insert (Name name) kind kindContext
                      , aliasContext = Map.insert name type' aliasContext }
-        fun acc@TyperEnv{..} (DeclFun name expectedType expr) =
+        fun acc@TyperEnv{..} (callback -> (DeclFun name expectedType expr)) =
           do type' <- findPlaceholderAlias acc expectedType
              kind <- kindCheckWithEnvironment acc type'
              case kind of
@@ -70,8 +72,7 @@ typeCheckDeclarations env@TyperEnv{} list = foldM fun env list
                 then return newEnv
                 else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show type') (show type')
                other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show type') (show other)
-        fun acc@TyperEnv{..} (DeclModule name decls) = undefined
-
+        fun acc (callback -> (DeclModule name decls)) = typeCheckDeclarations acc decls (renameDeclaration (append name ":"))
 
 findPlaceholderAlias :: TyperEnv -> Type -> ResultT Type
 findPlaceholderAlias TyperEnv{..} (TAliasPlaceholder name) =

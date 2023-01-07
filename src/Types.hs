@@ -15,10 +15,11 @@ module Types (
   Declaration(..),
   Label,
   extractName,
+  renameDeclaration,
   Field) where
 
 import Data.Text.Arbitrary ( Text )
-import Data.Text ( unpack )
+import Data.Text ( unpack, append )
 import GHC.Generics ( Generic )
 import Test.QuickCheck ( Arbitrary(arbitrary), listOf )
 import Test.QuickCheck.Arbitrary.ADT
@@ -240,6 +241,13 @@ data Declaration
     | DeclType Text Type
     | DeclModule Text [Declaration]
     deriving (Generic, Eq)
+
+renameDeclaration :: Text -> Declaration -> Declaration
+renameDeclaration _ (DeclExpr expr) = DeclExpr expr
+renameDeclaration toAppend (DeclVal name value) = DeclVal (append toAppend name) value
+renameDeclaration toAppend (DeclType name t) = DeclType (append toAppend name) t
+renameDeclaration toAppend (DeclFun name t expr) = DeclFun (append toAppend name) t expr
+renameDeclaration toAppend (DeclModule name decls) = DeclModule (append toAppend name) decls
 
 instance Arbitrary Declaration where
   arbitrary = genericArbitrary

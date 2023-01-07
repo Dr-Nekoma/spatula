@@ -56,13 +56,6 @@ internalZ = EAbstraction
                       (EVariable "x"))
                     (EVariable "v"))))
 
-renameDeclaration :: Text -> Declaration -> Declaration
-renameDeclaration _ (DeclExpr expr) = DeclExpr expr
-renameDeclaration toAppend (DeclVal name value) = DeclVal (append toAppend name) value
-renameDeclaration toAppend (DeclType name t) = DeclType (append toAppend name) t
-renameDeclaration toAppend (DeclFun name t expr) = DeclFun (append toAppend name) t expr
-renameDeclaration toAppend (DeclModule name decls) = DeclModule (append toAppend name) decls
-
 evalDeclarations :: EvalEnv -> [Declaration] -> (Declaration -> Declaration) -> ResultT EvalEnv
 evalDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declaration found to evaluate "
 evalDeclarations env list callback = foldM fun env list

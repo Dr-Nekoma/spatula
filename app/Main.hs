@@ -24,7 +24,7 @@ fullExecution content = do
   case parse fileP "" content of
     Left errorParse -> TIO.putStrLn $ buildError (errorParse :: ParseError)
     Right decls -> do
-        typeEnv' <- runExceptT $ typeCheckDeclarations typerInitialEnv decls
+        typeEnv' <- runExceptT $ typeCheckDeclarations typerInitialEnv decls id
         case typeEnv' of
          Left errorType -> TIO.putStrLn $ "\ESC[91m" <> errorType
          Right _ -> do evalEnv' <- runExceptT $ evalDeclarations evaluatorPrelude decls id
@@ -60,7 +60,7 @@ main = do
                Right asts -> do
                   when
                     justTypeCheck
-                    (runExceptT (typeCheckDeclarations typerInitialEnv asts) >>= printMessage . fmap (`differTyperEnv` typerInitialEnv))
+                    (runExceptT (typeCheckDeclarations typerInitialEnv asts id) >>= printMessage . fmap (`differTyperEnv` typerInitialEnv))
                   when
                     justEvaluate
                     (putStrLn "\ESC[91m- YOU ARE CRAZY - \ESC[00m" >> runExceptT (evalDeclarations evaluatorPrelude asts id) >>= printMessage . fmap (`Map.difference` evaluatorPrelude))
