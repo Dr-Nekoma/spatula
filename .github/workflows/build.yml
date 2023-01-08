@@ -23,14 +23,15 @@ jobs:
       run: |
         mkdir build && cp -r result/* build/ && chmod +w -R build/
         chmod 744 build/bin/spatula-exe
+        cp build/bin/spatula-exe $(pwd)/spatula-exe
     # NOTE: Another workaround https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
-    - name: Tar files
-      run: tar cvf spatula.tar build/bin
+    #- name: Tar files
+    #  run: tar cvf spatula.tar build/bin
     - name: "Upload artifact to github"
       uses: actions/upload-artifact@v3
       with:
         name: spatula-tar
-        path: spatula.tar
+        path: spatula-exe
     - name: List examples
       run: echo "EXAMPLES=$(ls -L1 examples/*.sw | sed 's!.*/!!' | sort | tr '\n' ", " | sed 's/\.sw//g' | sed 's/.$//')" >> $GITHUB_ENV
 
@@ -52,9 +53,11 @@ jobs:
     - uses: actions/download-artifact@v2
       with:
         name: spatula-tar
-        path: spatula.tar
+        path: spatula-exe
     - name: Run binaries
       run: |
         ls -lah
-        chmod -R 644 spatula.tar && tar xvf spatula.tar
-        ./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
+        #chmod -R 644 spatula.tar && tar xvf spatula.tar
+        #./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
+        chmod 744 spatula-exe
+        ./spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
