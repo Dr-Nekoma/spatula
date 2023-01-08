@@ -56,6 +56,6 @@ jobs:
     - name: Run binaries
       run: |
         ls -lah
-        mkdir -p build/bin
+        chmod 644 spatula.tar
         tar xvf spatula.tar
         ./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
