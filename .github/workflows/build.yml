@@ -1,0 +1,63 @@
+name: "Nix"
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    name: Nix Build
+    steps:
+    - uses: actions/checkout@v3
+    - uses: cachix/install-nix-action@v18
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+        github_access_token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Nix Build
+      run: |
+        nix build
+    # NOTE: Workaround for this issue https://github.com/actions/upload-artifact/issues/92
+    - name: Copy binary artifacts
+      run: |
+        mkdir build && cp -r result/* build/ && chmod +w -R build/
+        chmod 744 build/bin/spatula-exe
+        cp build/bin/spatula-exe $(pwd)/spatula-exe
+    # NOTE: Another workaround https://github.com/actions/upload-artifact#maintaining-file-permissions-and-case-sensitive-files
+    #- name: Tar files
+    #  run: tar cvf spatula.tar build/bin
+    - name: "Upload artifact to github"
+      uses: actions/upload-artifact@v3
+      with:
+        name: spatula-tar
+        path: spatula-exe
+    - name: List examples
+      run: echo "EXAMPLES=$(ls -L1 examples/*.sw | sed 's!.*/!!' | sort | tr '\n' ", " | sed 's/\.sw//g' | sed 's/.$//')" >> $GITHUB_ENV
+
+  test-bin:
+    runs-on: ubuntu-latest
+    name: Spatula / ${{ matrix.example }}
+    needs: [build]
+    strategy:
+      matrix:
+        # Run the following to re-generate this list
+        # ls -L1 examples/*.sw | sed 's!.*/!!' | sort | tr '\n' ", " | sed 's/\.sw//g' | sed 's/.$//'
+        example: [ADT,Alias,Comment,Factorial,Filter,Fold,Forall,Functions,Funs,Fun,IO,List,Map,Multiple,Print,Progn,Read,Record,Sum]
+        excluded:
+          # Add any examples that are not fully supported here
+          - example: [ADT]
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/download-artifact@v2
+      with:
+        name: spatula-tar
+        path: spatula-exe
+    - name: Run binaries
+      run: |
+        ls -lah
+        #chmod -R 644 spatula.tar && tar xvf spatula.tar
+        #./build/bin/spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw
+        chmod 744 spatula-exe
+        ./spatula-exe -f $(pwd)/examples/${{ matrix.example }}.sw

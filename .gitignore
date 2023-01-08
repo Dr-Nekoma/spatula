@@ -74,3 +74,8 @@ flycheck_*.el
 
 # Nix
 result
+
+# Other artifacts
+*exe
+*env
+public

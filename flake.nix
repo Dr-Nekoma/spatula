@@ -8,6 +8,7 @@
       url = "github:numtide/flake-utils";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
   };
 
   outputs = { flake-utils, nixpkgs, self, ... }:
@@ -19,7 +20,8 @@
         haskellPackages = pkgs.haskellPackages;
         packageName = "spatula";
       in rec {
-        packages.${packageName} = # (ref:haskell-package-def)
+        packages.${packageName} =
+          # Ignore test cases
           pkgs.haskell.lib.dontCheck (
             haskellPackages.callCabal2nix packageName self rec {
               # Dependency overrides go here

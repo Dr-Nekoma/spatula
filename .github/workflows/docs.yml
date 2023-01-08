@@ -1,0 +1,22 @@
+name: "Documentation"
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+    paths: ["publish.el", "docs/**", "examples/**"]
+
+jobs:
+  emacs:
+    runs-on: ubuntu-latest
+    env:
+      ENVIRONMENT: "production"
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup
+      run: |
+        sudo apt-get -y install emacs
+    - name: Generate Docs
+      run: |
+        chmod 700 ./generate_docs.sh
+        ./generate_docs.sh

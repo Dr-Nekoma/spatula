@@ -1,5 +1,10 @@
 #+TITLE: spatula
 
+#+html:  <a href="https://builtwithnix.org"><img alt="built with nix" src="https://builtwithnix.org/badge.svg" /></a>
+#+html:  <a href="https://github.com/Dr-Nekoma/spatula/actions/workflows/flake.yml"><img alt="build status" src="https://github.com/Dr-Nekoma/spatula/actions/workflows/flake.yml/badge.svg" /></a>
+
+
+
 * Grammar
   [[file:docs/grammar.org][Document with Silverware+'s grammar]]
   
@@ -7,9 +12,11 @@
 
 ** Nix
 
+To generate the project's binary:
 #+BEGIN_SRC shell
   nix build
 #+END_SRC
+
 
 #+BEGIN_SRC shell
   nix develop

@@ -1,0 +1,16 @@
+# -*- mode: org; -*-
+#+TITLE: Spatula Documentation
+#+DESCRIPTION: A compiler/interpreter for the 'Silverware+' programming language (written in Haskell)
+#+KEYWORDS: silverware
+#+LANGUAGE:  en
+#+OPTIONS:   H:4 num:t toc:2
+#+HTML_MATHJAX: align: left indent: 5em tagside: left
+
+* Design of Silverware+'s Grammar
+#+INCLUDE: "./grammar.org" :minlevel 2
+
+* Silverware Plus Desirable Features
+#+INCLUDE: "./features.org" :minlevel 2
+
+** Parser
+#+INCLUDE: "./parser.org" :minlevel 3
