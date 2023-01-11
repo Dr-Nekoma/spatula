@@ -61,6 +61,8 @@ typeSubstitution placeHolder type' target =
     TList (TListInfo listType) -> TList . TListInfo $ fmap (typeSubstitution placeHolder type') listType
     TAnonymousRecord fields -> TAnonymousRecord $ fmap (second $ typeSubstitution placeHolder type') fields
     TAlias name type'' -> TAlias name $ typeSubstitution placeHolder type'' type'
+    TAliasPlaceholder name -> TAliasPlaceholder name
+    TAlgebraic fields -> TAlgebraic $ fmap (second (fmap (typeSubstitution placeHolder type'))) fields
     
 class Curryable a where  
     kurry :: a -> a -> a
@@ -164,8 +166,8 @@ instance Show Type where
   show TRational = "Rational"
   show TBool = "Bool"
   show TString = "String"
-  show (TList (TListInfo (Just type'))) = printf "List|%s|" (show type')
-  show (TList (TListInfo Nothing)) = "List|_|"
+  show (TList (TListInfo (Just type'))) = printf "|List %s|" (show type')
+  show (TList (TListInfo Nothing)) = "|List|"
   show (TArrow source target) =
     case source of
       TArrow _ _ -> printf "(%s) -> %s" (show source) (show target)
@@ -181,7 +183,11 @@ instance Show Type where
   show (TAnonymousRecord list) = go "| Anonymous Record | " list
     where go acc [] = acc ++ "\n"
           go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ " ") xs
-
+  show (TAlgebraic []) = "Empty ADT"
+  show (TAlgebraic list) = go "| ADT | " list
+    where go acc [] = acc ++ "\n"
+          go acc ((name, types):xs) = go (acc ++ "Tag: " ++ show name ++ " - Types: " ++ show types ++ " ") xs
+  
 instance Curryable Type where
   kurry = TArrow
 
@@ -277,6 +283,7 @@ data Expression
     | EProgn [Expression]
     | ERecordProjection Expression Label
     | ERecordUpdate Expression [(Label, Expression)]
+    | EAlgebraic Label [Expression]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Expression where

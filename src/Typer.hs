@@ -2,7 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
-module Typer ( typeCheckDeclarations, typeCheckExpression, TyperEnv(..), kindCheckWithEnvironment, findPlaceholderAlias ) where
+module Typer where
 
 import Types
     ( Type(..),
@@ -30,6 +30,7 @@ import Data.Bifunctor ( Bifunctor(second) )
 import Control.Monad.IO.Class
 import Data.Either.Extra
 import qualified Data.Set as S
+import qualified Data.Text.Encoding as Option
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -49,6 +50,39 @@ let x: a = "nathan" (* x is a string *)
 type a = int (* After this x is still a string *)
 -}
 
+
+-- [defalgebraic Axis
+--     (X Integer String) 
+--     Y
+--     (Z String)]
+
+
+-- [defalgebraic Abc [(T Star) (U Star)]
+--     (X T)
+--     Y
+--     (Z U)]
+
+
+-- X :: Integer -> String -> Axis
+
+
+
+-- ArrowT _ Axis
+
+addFunctionsToEnv :: TyperEnv -> Text -> [(TVariableInfo, Kind)] -> Type -> TyperEnv
+addFunctionsToEnv _ _ _ (TAlgebraic []) = error "This should be impossible. Great job Lemos with the Parser"
+addFunctionsToEnv env@TyperEnv{..} typeName accum type'@(TAlgebraic list) =
+  let makeForall currentType = foldl (\x (info, kind) -> TForall (AbstractionInfo info kind x)) currentType accum
+      functions = map (second (makeForall . foldr TArrow (TAlias typeName type'))) list
+      addFunction (name, function) acc =
+        Map.insert (typeName <> "." <> name) function (Map.insert name function acc)
+      newEnv = foldr addFunction variableTypes functions
+  in env { variableTypes = newEnv }
+addFunctionsToEnv env typeName acc (TAbstraction (AbstractionInfo info kind type')) =
+  let newAcc = (info, kind) : acc
+  in addFunctionsToEnv env typeName newAcc type'
+addFunctionsToEnv env _ _ _ = env
+
 typeCheckDeclarations :: TyperEnv -> [Declaration] -> (Declaration -> Declaration) -> ResultT TyperEnv
 typeCheckDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declarations found to type check"
 typeCheckDeclarations env@TyperEnv{} list callback = foldM fun env list
@@ -59,8 +93,9 @@ typeCheckDeclarations env@TyperEnv{} list callback = foldM fun env list
         fun acc@TyperEnv{..} (callback -> (DeclType name t)) = do
           type' <- findPlaceholderAlias acc t
           kind <- kindCheckWithEnvironment acc type'
-          pure $ acc { kindContext = Map.insert (Name name) kind kindContext
-                     , aliasContext = Map.insert name type' aliasContext }
+          let acc2 = addFunctionsToEnv acc name [] type'
+          pure $ acc2 { kindContext = Map.insert (Name name) kind kindContext
+                      , aliasContext = Map.insert name type' aliasContext }
         fun acc@TyperEnv{..} (callback -> (DeclFun name expectedType expr)) =
           do type' <- findPlaceholderAlias acc expectedType
              kind <- kindCheckWithEnvironment acc type'
@@ -122,6 +157,8 @@ typeCheckExpression env (EList list) = do
     [] -> pure $ (TList . TListInfo) Nothing 
     (x:xs) | allSameType x xs -> pure $ (TList . TListInfo) (Just x)
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
+
+typeCheckExpression _ (EAlgebraic _ _) = throwError' "We tried to type check an EAlgebraic"
 
 -- TODO add a warning message to the elements that are not Unit type (aside from the last one of course)
 typeCheckExpression env (EProgn list) = do
@@ -307,10 +344,8 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
       let kind = Map.lookup (Name name) kindContext in
       maybe (throwError' $ printf "KIND ERROR: Unbound type alias %s in the environment." (show name)) return kind
     TAnonymousRecord fields -> do
-      let ifStar StarK = True
-          ifStar _ = False
       internalKinds <- for (map snd fields) (kindCheckWithEnvironment env)
-      if all ifStar internalKinds
+      if all (==StarK) internalKinds
       then pure StarK
       else throwError' "KIND ERROR: Internal types of fields should have kind *."
     TList (TListInfo Nothing) -> pure StarK
@@ -346,7 +381,13 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
       let newKindEnv = Map.insert label kind kindContext
           newAliasEnv = Map.insert (extractName label) (TVariable label) aliasContext
       kindBody <- kindCheckWithEnvironment (env {kindContext = newKindEnv, aliasContext = newAliasEnv}) bodyType
-      pure $ ArrowK kind kindBody      
+      pure $ ArrowK kind kindBody
+    TAlgebraic typedNames -> do
+      let types = map snd typedNames
+      internalKinds <- for (concat types) (kindCheckWithEnvironment env)
+      if all (==StarK) internalKinds
+      then pure StarK
+      else throwError' "KIND ERROR: Internal types for ADTs of fields should have kind *."
 
 reduceType :: Type -> Type
 reduceType type' = 
@@ -360,6 +401,10 @@ reduceType type' =
     TAlias _ type'' -> reduceType type''
     TAnonymousRecord fields ->
       TAnonymousRecord $ map (second reduceType) fields
+    TAlgebraic namedTypes ->
+      let (names, types) = unzip namedTypes
+          reducedTypes = map (map reduceType) types
+      in TAlgebraic $ zip names reducedTypes
     TList (TListInfo type'') -> TList . TListInfo $ fmap reduceType type''
     TArrow parameter returnType -> TArrow (reduceType parameter) (reduceType returnType)
     TVariable ident -> TVariable ident

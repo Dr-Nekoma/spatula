@@ -95,7 +95,8 @@ addDeclaration name body = do
             Right k -> do
               let x' = Map.insert (Name name) k x
                   y' = Map.insert name t' y
-              put (TyperEnv typerEnv x' y', evalEnv)
+                  acc2 = addFunctionsToEnv (TyperEnv typerEnv x' y') name [] t'
+              put (acc2, evalEnv)
 
 typeCheckEval :: Expression -> ReplT (Result (Type, Value))
 typeCheckEval expr = do

@@ -14,7 +14,7 @@ fileP :: ParserT st [Declaration]
 fileP = manyTill (skip *> declarationP <* skip) eof
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [defaliasP, defvalP, defunP, defmoduleP, DeclExpr <$> expressionP]
+declarationP = choice $ fmap try [defaliasP, defadtP, defvalP, defunP, defmoduleP, DeclExpr <$> expressionP]
 
 defvalP :: ParserT st Declaration
 defvalP = do
@@ -26,6 +26,26 @@ defvalP = do
 -- [defalias Name String]
 
 --[defAlias Combine [(a Star)] |List a|]
+
+
+ 
+-- [defalgebraic Axis[(T Star) (U Star)]
+--     (X Integer) 
+--     Y
+--     Z]
+
+defadtP :: ParserT st Declaration
+defadtP = do
+  openDelimiter *> skip *> string "defalgebraic" <* skip
+  name <- variableGeneric <* skip
+  namedKinds <- skip *> optionMaybe (openDelimiter *> many1 (argAnd kindP) <* closeDelimiter) <* skip
+  let nullaryP = (\name -> (name, [])) <$> (skip *> variableGeneric <* skip)
+      tagP = (,) <$> (skip *> char '(' *> variableGeneric) <*> (skip *> many1 (typeP <* skip)) <* char ')' <* skip
+  types <- many1 (skip *> (choice $ fmap try [nullaryP, tagP]) <* skip) <* closeDelimiter <* skip
+  let algebraic = TAlgebraic types
+      t = maybe algebraic (Prelude.foldr fun algebraic) namedKinds
+      fun (n, kind) acc = TAbstraction (AbstractionInfo (Name n) kind acc)
+  pure $ DeclType name t
 
 defaliasP :: ParserT st Declaration
 defaliasP = do

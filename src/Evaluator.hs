@@ -1,15 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-module Evaluator ( evalDeclarations, eval, Value(..), NativeFunction(..), EvalEnv, evalExpression ) where
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
+module Evaluator where
 
 import Types
 import qualified Data.Map as Map
-import Data.Text ( unpack, Text, append )
+import Data.Text ( unpack, Text, append, pack )
 import Utils ( ResultT, throwError' )
 import Text.Printf ( printf )
 import Data.Traversable
 import Control.Monad ( foldM )
 import Data.List
+import Data.Bifunctor ( Bifunctor(second) )
+import Data.Maybe
+import Control.Monad.IO.Class
+import System.IO.Unsafe
 
 type EvalEnv = Map.Map Text Value
 
@@ -25,6 +31,7 @@ data Value
     | VNativeFunction NativeFunction
     | VList [Value]
     | VRecord [(Label, Value)]
+    | VAlgebraic Label [Value]
     deriving Eq
 
 instance Show Value where
@@ -33,10 +40,41 @@ instance Show Value where
   show (VList (x:xs)) = foldl go ("'[" ++ show x) xs ++ "]"
     where go acc y = acc ++ " " ++ show y
   show (VLiteral literal) = show literal
-  show (VClosure {}) = "<fun>"
+  show vclosure@VClosure {} = printAlgebraic vclosure
   show (VNativeFunction _) = "<builtin>"
   show (VRecord []) = ""
   show (VRecord ((label, value):xs)) = "Label: " ++ unpack label ++ " - Value: " ++ show value ++ "\n" ++ show (VRecord xs)
+  show (VAlgebraic name []) = "ADT " ++ unpack name
+  show (VAlgebraic name list) = unpack name ++ ": " ++ go list
+    where go [] = "\n"
+          go (x:xs) = show x ++ " " ++ go xs
+
+printAlgebraic :: Value -> String
+printAlgebraic (VClosure x body env) = case body of
+  EAbstraction _ _ _ ex -> printAlgebraic (VClosure x ex env)
+  EAlgebraic name values ->
+    let unpack' (EVariable n) = n
+    in unpack name ++ " " ++ show (mapMaybe (\(unpack' -> x') -> Map.lookup x' env) values)
+  _ -> "<fun>"
+printAlgebraic _ = error "This print should be exclusive for algebraic closures"
+
+generateAlgebraic :: EvalEnv -> Text -> Int -> Value
+generateAlgebraic env tag howMany = VClosure x (foldr (\e acc -> EAbstraction e TUnit Nothing acc) algebraicReturn xs) env
+  where names@(x:xs) = map (pack . show) [1..howMany]
+        algebraicReturn = EAlgebraic tag (map EVariable names)
+
+addFunctionsToEnv2 :: EvalEnv -> Text -> Type -> EvalEnv
+addFunctionsToEnv2 _ _ (TAlgebraic []) = error "This should be impossible. Great job Lemos with the Parser"
+addFunctionsToEnv2 env typeName (TAlgebraic list) =
+  let newEnv = foldr foldFields env list
+      foldFields (name, types) acc =
+        let generateValue name' [] = VAlgebraic name' []
+            generateValue name' list' = generateAlgebraic acc name' (length list')
+            y = generateValue name types
+        in Map.insert (typeName <> "." <> name) y (Map.insert name y acc)
+  in newEnv
+addFunctionsToEnv2 env typeName (TAbstraction (AbstractionInfo _ _ type')) = addFunctionsToEnv2 env typeName type'
+addFunctionsToEnv2 env _ _ = env
 
 -- https://en.wikipedia.org/wiki/Fixed-point_combinator#Strict_fixed-point_combinator
 internalZ :: Expression
@@ -63,9 +101,9 @@ evalDeclarations env list callback = foldM fun env list
         fun acc (callback -> (DeclVal name value)) =
           do v <- evalExpression acc value
              return $ Map.insert name v acc
-        fun acc (callback -> (DeclType _ _)) =
-          -- TODO add cases of a discriminated union to the context as functions
-          pure acc
+        fun acc (callback -> (DeclType name t)) = do
+          -- TODO add cases of a discriminated union to the context as functions         
+          pure $ addFunctionsToEnv2 acc name t
         fun acc (callback -> (DeclFun name t expr)) = do
           let zCombinator = EAbstraction "f" t Nothing (EApplication internalZ internalZ)
               newExpr = EApplication zCombinator (EAbstraction name t Nothing expr)
@@ -75,6 +113,10 @@ evalDeclarations env list callback = foldM fun env list
           evalDeclarations acc decls (renameDeclaration (append name ":"))
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
+
+evalExpression env (EAlgebraic label exprs) = do
+  values <- for exprs (evalExpression env)
+  pure $ VAlgebraic label values
 
 -- TODO: add a sortBy so we can have record value equality
 evalExpression env (EAnonymousRecord fields) = do

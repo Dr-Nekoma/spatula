@@ -1,13 +1,7 @@
-[defalias Int Integer]
-[deftype Point |x Integer
-                y Integer|]
+[defalgebraic Either[(T Star) (U Star)]
+  (Left T)
+  (Right U)]
 
-[defalgebraic Abc('T 'U)
-  (A Integer Integer)
-  (B 'T)
-  (C 'U)]
- 
-[defalgebraic Axis
-    X 
-    Y
-    Z]
+[defalias Result [(T Star)] |Either String T|]
+
+[print !|Result Integer| [Right !String !Integer 2]]
