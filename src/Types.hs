@@ -158,6 +158,7 @@ data Type
     | TAlias Text Type
     | TAliasPlaceholder Text
     | TAlgebraic [(Text, [Type])]
+    | TException
     deriving (Generic, Eq, Ord)
 
 instance Show Type where
@@ -243,6 +244,7 @@ instance Arbitrary Operator where
 data Declaration
     = DeclExpr Expression
     | DeclFun Text Type Expression
+    | DeclExn Text
     | DeclVal Text Expression
     | DeclType Text Type
     | DeclModule Text [Declaration]
@@ -284,6 +286,8 @@ data Expression
     | ERecordProjection Expression Label
     | ERecordUpdate Expression [(Label, Expression)]
     | EAlgebraic Label [Expression]
+    | EExceptionRaise Text
+    | EExceptionHandle [Expression] [Expression]
     deriving (Generic, Eq, Show)
 
 instance Arbitrary Expression where

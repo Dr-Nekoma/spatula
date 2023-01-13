@@ -87,6 +87,8 @@ typeCheckDeclarations :: TyperEnv -> [Declaration] -> (Declaration -> Declaratio
 typeCheckDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declarations found to type check"
 typeCheckDeclarations env@TyperEnv{} list callback = foldM fun env list
   where fun acc (callback -> (DeclExpr expr)) = typeCheckExpression acc expr >> return acc
+        fun acc@TyperEnv{..} (callback -> (DeclExn exn)) =
+          do return $ acc { variableTypes = Map.insert exn TException variableTypes}
         fun acc@TyperEnv{..} (callback -> (DeclVal name value)) =
           do type' <- typeCheckExpression acc value
              return $ acc { variableTypes = Map.insert name type' variableTypes}
@@ -165,7 +167,11 @@ typeCheckExpression env (EProgn list) = do
   listTypes <- for list (fmap reduceType . typeCheckExpression env)
   case listTypes of
     [] -> pure TUnit
-    nonEmptyList -> pure $ last nonEmptyList
+    nonEmptyList ->
+      let lastType = last nonEmptyList
+      in if lastType == TException
+      then pure TUnit
+      else pure lastType
 
 typeCheckExpression env (ERecordProjection expr label) = do
   potentialRecord <- reduceType <$> typeCheckExpression env expr
@@ -205,6 +211,9 @@ typeCheckExpression TyperEnv{..} (EVariable label) =
   case Map.lookup label variableTypes of
     Nothing -> throwError' $ printf "TYPE ERROR: Unbound variable %s in the environment." label
     Just type' -> pure type'
+
+typeCheckExpression TyperEnv{..} (EExceptionRaise _) =
+  pure $ TException
 
 typeCheckExpression env@TyperEnv{..} (ELet In bindings body) = do
   let (labels, expressions) = unzip bindings
@@ -392,6 +401,7 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
 reduceType :: Type -> Type
 reduceType type' = 
   case type' of
+    TException -> TException
     TUnit -> TUnit
     TInteger -> TInteger
     TRational -> TRational

@@ -32,6 +32,7 @@ data Value
     | VList [Value]
     | VRecord [(Label, Value)]
     | VAlgebraic Label [Value]
+    | VException Label
     deriving Eq
 
 instance Show Value where
@@ -43,6 +44,7 @@ instance Show Value where
   show vclosure@VClosure {} = printAlgebraic vclosure
   show (VNativeFunction _) = "<builtin>"
   show (VRecord []) = ""
+  show (VException label) = "Exception " ++ unpack label
   show (VRecord ((label, value):xs)) = "Label: " ++ unpack label ++ " - Value: " ++ show value ++ "\n" ++ show (VRecord xs)
   show (VAlgebraic name []) = "ADT " ++ unpack name
   show (VAlgebraic name list) = unpack name ++ ": " ++ go list
@@ -98,6 +100,8 @@ evalDeclarations :: EvalEnv -> [Declaration] -> (Declaration -> Declaration) -> 
 evalDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declaration found to evaluate "
 evalDeclarations env list callback = foldM fun env list
   where fun acc (callback -> (DeclExpr expr)) = evalExpression acc expr >> return acc
+        fun acc (callback -> (DeclExn exn)) =
+          do return $ Map.insert exn (VException exn) acc
         fun acc (callback -> (DeclVal name value)) =
           do v <- evalExpression acc value
              return $ Map.insert name v acc
@@ -128,9 +132,19 @@ evalExpression env (EList list) = do
   evaluatedElems <- for list (evalExpression env)
   pure $ VList evaluatedElems
 
+evalExpression env (EExceptionRaise exn) = do
+  case Map.lookup exn env of
+    Nothing -> throwError' $ printf "ERROR: Exception '%s' could not be found on raise. Is it in scope?" (unpack exn)
+    Just exn -> return exn
+
 evalExpression env (EProgn list) = do
+  let findExn (VException _) = True
+      findExn _ = False
+  -- Improve this later so it halts on a VException found, I am lazy now
   evaluatedElems <- for list (evalExpression env)
-  pure $ last evaluatedElems
+  case Data.List.find findExn evaluatedElems of
+    Nothing -> pure $ last evaluatedElems
+    Just exn -> pure $ exn
 
 evalExpression env (ERecordProjection expr label) = do
   potentialRecord <- evalExpression env expr
