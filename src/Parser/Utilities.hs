@@ -77,6 +77,7 @@ data Keyword =
   | Progn
   | RecordGet
   | RecordSet
+  | Match
   deriving (Enum, Bounded)
 
 instance Show Keyword where
@@ -89,6 +90,7 @@ instance Show Keyword where
   show Progn = "progn"
   show RecordGet = "getr"
   show RecordSet = "setr"
+  show Match = "match"
 
 delimiters :: [String]
 delimiters = map show ([minBound .. maxBound] :: [Delimiter])

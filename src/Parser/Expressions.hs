@@ -32,7 +32,7 @@ expressionsP :: ParserT st [Expression]
 expressionsP = many (skip *> expressionP <* skip) <* eof
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication, patternMatchingP]
 
 exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <*> expr <* closeDelimiter
@@ -59,6 +59,19 @@ exprAbstraction = do
   args <- arguments
   (returnType, body) <- (,) <$> (skip *> optionMaybe (skip *> char ':' *> skip *> typeP <* skip)) <*> many1 (expressionP <* skip) <* closeDelimiter
   pure $ foldArgs args returnType body
+
+-- [match v
+--   [[Left x] [print Integer x]]
+--   [[Right x] [print String x]]]
+
+patternMatchingP :: ParserT st Expression
+patternMatchingP = do
+  openDelimiter *> string "match" *> skip
+  toMatch <- expressionP <* skip
+  let pattern' = between openDelimiter closeDelimiter ((,) <$> (skip *> variableGeneric <* skip) <*> many (skip *> variableGeneric <* skip))
+      branch = between openDelimiter closeDelimiter ((\(p, bs) expr -> (p, bs, expr)) <$> (skip *> pattern' <* skip) <*> expressionP)
+  branches <- many1 (skip *> branch <* skip) <* closeDelimiter
+  pure $ EPatternMatching toMatch branches
 
 prognP :: ParserT st Expression
 prognP = do

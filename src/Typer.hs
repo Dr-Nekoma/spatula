@@ -31,6 +31,7 @@ import Control.Monad.IO.Class
 import Data.Either.Extra
 import qualified Data.Set as S
 import qualified Data.Text.Encoding as Option
+import Data.List
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -159,6 +160,27 @@ typeCheckExpression env (EList list) = do
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
 
 typeCheckExpression _ (EAlgebraic _ _) = throwError' "We tried to type check an EAlgebraic"
+
+typeCheckExpression _ (EPatternMatching _ []) = throwError' "This should not be possible. Good job with the parser Lemos"
+
+typeCheckExpression env@TyperEnv{..} (EPatternMatching toMatch list) = do
+  potentialSumType <- reduceType <$> typeCheckExpression env toMatch
+  case potentialSumType of
+    TAlgebraic sumTypes -> do
+      let (sumTypes', types') = unzip $ map (\(name, types) -> ((name, length types), types)) $ sort sumTypes
+          sortTriplet (n1, _, _) (n2, _, _) = compare n1 n2
+          (list', branchesAndBinds) = unzip $ map (\(name, binds, branch) -> ((name, length binds), (branch, binds))) $ sortBy sortTriplet list
+      if sumTypes' == list'
+        then do
+          let branchesBindsTypes = zip branchesAndBinds types'
+              addVariablesEnv vars ts e = e { variableTypes = foldr (\(var, type') acc -> Map.insert var type' acc) variableTypes $ zip vars ts }
+          branchesTypes <- for branchesBindsTypes (\((branch, binds), ts') -> reduceType <$> typeCheckExpression (addVariablesEnv binds ts' env) branch)
+          let type' = head branchesTypes
+          if all (== type') branchesTypes
+            then return type'
+            else throwError' $ printf  "TYPE ERROR: Branch types diverge. %s" (show branchesTypes)
+        else throwError' $ printf "TYPE ERROR: Constructor name or how many binds are wrong. Expected %s and got %s" (show sumTypes') (show list')
+    other -> throwError' $ printf "TYPE ERROR: Expected sum type but got %s" (show other)
 
 -- TODO add a warning message to the elements that are not Unit type (aside from the last one of course)
 typeCheckExpression env (EProgn list) = do

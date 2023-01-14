@@ -40,26 +40,17 @@ instance Show Value where
   show (VList (x:xs)) = foldl go ("'[" ++ show x) xs ++ "]"
     where go acc y = acc ++ " " ++ show y
   show (VLiteral literal) = show literal
-  show vclosure@VClosure {} = printAlgebraic vclosure
+  show VClosure {} = "<fun>" --printAlgebraic vclosure
   show (VNativeFunction _) = "<builtin>"
   show (VRecord []) = ""
   show (VRecord ((label, value):xs)) = "Label: " ++ unpack label ++ " - Value: " ++ show value ++ "\n" ++ show (VRecord xs)
   show (VAlgebraic name []) = "ADT " ++ unpack name
-  show (VAlgebraic name list) = unpack name ++ ": " ++ go list
+  show (VAlgebraic name list) = unpack name ++ " " ++ go list
     where go [] = "\n"
           go (x:xs) = show x ++ " " ++ go xs
 
-printAlgebraic :: Value -> String
-printAlgebraic (VClosure x body env) = case body of
-  EAbstraction _ _ _ ex -> printAlgebraic (VClosure x ex env)
-  EAlgebraic name values ->
-    let unpack' (EVariable n) = n
-    in unpack name ++ " " ++ show (mapMaybe (\(unpack' -> x') -> Map.lookup x' env) values)
-  _ -> "<fun>"
-printAlgebraic _ = error "This print should be exclusive for algebraic closures"
-
-generateAlgebraic :: EvalEnv -> Text -> Int -> Value
-generateAlgebraic env tag howMany = VClosure x (foldr (\e acc -> EAbstraction e TUnit Nothing acc) algebraicReturn xs) env
+generateAlgebraic :: Text -> Int -> Value
+generateAlgebraic tag howMany = VClosure x (foldr (\e acc -> EAbstraction e TUnit Nothing acc) algebraicReturn xs) Map.empty
   where names@(x:xs) = map (pack . show) [1..howMany]
         algebraicReturn = EAlgebraic tag (map EVariable names)
 
@@ -69,7 +60,7 @@ addFunctionsToEnv2 env typeName (TAlgebraic list) =
   let newEnv = foldr foldFields env list
       foldFields (name, types) acc =
         let generateValue name' [] = VAlgebraic name' []
-            generateValue name' list' = generateAlgebraic acc name' (length list')
+            generateValue name' list' = generateAlgebraic name' (length list')
             y = generateValue name types
         in Map.insert (typeName <> "." <> name) y (Map.insert name y acc)
   in newEnv
@@ -113,6 +104,17 @@ evalDeclarations env list callback = foldM fun env list
           evalDeclarations acc decls (renameDeclaration (append name ":"))
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
+
+evalExpression env (EPatternMatching toMatch list) = do
+  evaluatedMatch <- evalExpression env toMatch
+  case evaluatedMatch of
+    VAlgebraic label list' -> do
+      case find (\(label', _, _) -> label' == label) list of
+        Nothing -> throwError' $ printf "ERROR: Didn't find label %s in the list of labels" (show label)
+        Just (_, binds, branch) -> do
+             let addVariablesEnv vars values e = foldr (\(var, value) acc -> Map.insert var value acc) e $ zip vars values
+             evalExpression (addVariablesEnv binds list' env) branch
+    other -> throwError' $ printf "ERROR: Expected algebraic value but got %s" (show other)
 
 evalExpression env (EAlgebraic label exprs) = do
   values <- for exprs (evalExpression env)

@@ -284,7 +284,12 @@ data Expression
     | ERecordProjection Expression Label
     | ERecordUpdate Expression [(Label, Expression)]
     | EAlgebraic Label [Expression]
+    | EPatternMatching Expression [(Label, [Label], Expression)] 
     deriving (Generic, Eq, Show)
+
+-- data Patternable =
+--   | PLiteral Literal
+--   | PList List
 
 instance Arbitrary Expression where
   arbitrary = genericArbitrary
