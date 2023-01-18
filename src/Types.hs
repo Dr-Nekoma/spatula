@@ -11,6 +11,7 @@ module Types (
   Literal(..),
   LetSort(..),
   Operator(..),
+  Pattern(..),
   Expression(..),
   Declaration(..),
   Label,
@@ -268,6 +269,17 @@ instance Show Declaration where
 type Label = Text
 type Field = (Label, Expression)
 
+data Pattern =
+    PSumType Label [Pattern]
+  | PVariable Label
+  | PLiteral Literal
+  | PDisjunctive Pattern Pattern
+  | PWildcard
+  deriving (Generic, Eq, Show)
+
+instance Arbitrary Pattern where
+  arbitrary = genericArbitrary
+
 data Expression
     = ELiteral Literal
     | EVariable Text
@@ -284,12 +296,8 @@ data Expression
     | ERecordProjection Expression Label
     | ERecordUpdate Expression [(Label, Expression)]
     | EAlgebraic Label [Expression]
-    | EPatternMatching Expression [(Label, [Label], Expression)] 
+    | EPatternMatching Expression [(Pattern, Maybe Expression, Expression)] 
     deriving (Generic, Eq, Show)
-
--- data Patternable =
---   | PLiteral Literal
---   | PList List
 
 instance Arbitrary Expression where
   arbitrary = genericArbitrary

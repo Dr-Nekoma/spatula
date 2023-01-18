@@ -10,6 +10,7 @@ import Types
       TVariableInfo(..),
       Kind(..),
       Declaration(..),
+      Pattern(..),
       Expression(..),
       LetSort(..),
       Literal(LBool, LUnit, LInteger, LRational, LString),
@@ -32,6 +33,7 @@ import Data.Either.Extra
 import qualified Data.Set as S
 import qualified Data.Text.Encoding as Option
 import Data.List
+import Data.Maybe
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -69,6 +71,37 @@ type a = int (* After this x is still a string *)
 
 
 -- ArrowT _ Axis
+
+data Satisfaction = Satisfied | Unsatisfied
+
+checkExaustiveness :: Type -> [(Pattern, Maybe Expression, Expression)] -> ResultT ()
+checkExaustiveness TUnit list = do
+   let function Unsatisfied (PLiteral LUnit, Nothing, _) = pure Satisfied
+       function Unsatisfied (PLiteral LUnit, Just _, _) = pure Unsatisfied
+       function Unsatisfied (PVariable _, Nothing, _) = pure Satisfied
+       function Unsatisfied (PVariable _, Just _, _) = pure Unsatisfied
+       function Unsatisfied (PWildcard, Nothing, _) = pure Satisfied
+       function Unsatisfied (PWildcard, Just _, _) = pure Unsatisfied
+       function Unsatisfied other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
+       function Satisfied _ = liftIO $ print "WARNING: Unreachable case" >> pure Satisfied
+   satisfaction <- foldM function Unsatisfied list
+   case satisfaction of
+      Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
+      Satisfied -> pure ()
+
+createBinds :: Type -> Pattern -> TyperEnv -> TyperEnv
+createBinds = undefined
+
+keepPatternAndGuard :: (Pattern, Maybe Expression, Expression) -> (Pattern, Bool)
+keepPatternAndGuard (p, g, _) = (p, isJust g)
+
+checkAllBranches :: Type -> TyperEnv -> [(Pattern, Maybe Expression, Expression)] -> ResultT Type
+checkAllBranches type' env list = do
+  types' <- for list (\(pattern',_,branch) -> reduceType <$> typeCheckExpression (createBinds type' pattern' env) branch)
+  let x = head types'
+  if all (==x) types'
+  then pure x
+  else throwError' $ printf "TYPE ERROR: Not all the types in branches %s are the same" (show types')
 
 addFunctionsToEnv :: TyperEnv -> Text -> [(TVariableInfo, Kind)] -> Type -> TyperEnv
 addFunctionsToEnv _ _ _ (TAlgebraic []) = error "This should be impossible. Great job Lemos with the Parser"
@@ -163,24 +196,33 @@ typeCheckExpression _ (EAlgebraic _ _) = throwError' "We tried to type check an 
 
 typeCheckExpression _ (EPatternMatching _ []) = throwError' "This should not be possible. Good job with the parser Lemos"
 
-typeCheckExpression env@TyperEnv{..} (EPatternMatching toMatch list) = do
-  potentialSumType <- reduceType <$> typeCheckExpression env toMatch
-  case potentialSumType of
-    TAlgebraic sumTypes -> do
-      let (sumTypes', types') = unzip $ map (\(name, types) -> ((name, length types), types)) $ sort sumTypes
-          sortTriplet (n1, _, _) (n2, _, _) = compare n1 n2
-          (list', branchesAndBinds) = unzip $ map (\(name, binds, branch) -> ((name, length binds), (branch, binds))) $ sortBy sortTriplet list
-      if sumTypes' == list'
-        then do
-          let branchesBindsTypes = zip branchesAndBinds types'
-              addVariablesEnv vars ts e = e { variableTypes = foldr (\(var, type') acc -> Map.insert var type' acc) variableTypes $ zip vars ts }
-          branchesTypes <- for branchesBindsTypes (\((branch, binds), ts') -> reduceType <$> typeCheckExpression (addVariablesEnv binds ts' env) branch)
-          let type' = head branchesTypes
-          if all (== type') branchesTypes
-            then return type'
-            else throwError' $ printf  "TYPE ERROR: Branch types diverge. %s" (show branchesTypes)
-        else throwError' $ printf "TYPE ERROR: Constructor name or how many binds are wrong. Expected %s and got %s" (show sumTypes') (show list')
-    other -> throwError' $ printf "TYPE ERROR: Expected sum type but got %s" (show other)
+-- typeCheckExpression env@TyperEnv{..} (EPatternMatching toMatch list) = do
+--   potentialSumType <- reduceType <$> typeCheckExpression env toMatch
+--   case potentialSumType of
+--     TAlgebraic sumTypes -> do
+--       let (sumTypes', types') = unzip $ map (\(name, types) -> ((name, length types), types)) $ sort sumTypes
+--           sortTriplet (n1, _, _) (n2, _, _) = compare n1 n2
+--           (list', branchesAndBinds) = unzip $ map (\(name, binds, branch) -> ((name, length binds), (branch, binds))) $ sortBy sortTriplet list
+--       if sumTypes' == list'
+--         then do
+--           let branchesBindsTypes = zip branchesAndBinds types'
+--               addVariablesEnv vars ts e = e { variableTypes = foldr (\(var, type') acc -> Map.insert var type' acc) variableTypes $ zip vars ts }
+--           branchesTypes <- for branchesBindsTypes (\((branch, binds), ts') -> reduceType <$> typeCheckExpression (addVariablesEnv binds ts' env) branch)
+--           let type' = head branchesTypes
+--           if all (== type') branchesTypes
+--             then return type'
+--             else throwError' $ printf  "TYPE ERROR: Branch types diverge. %s" (show branchesTypes)
+--         else throwError' $ printf "TYPE ERROR: Constructor name or how many binds are wrong. Expected %s and got %s" (show sumTypes') (show list')
+--     other -> throwError' $ printf "TYPE ERROR: Expected sum type but got %s" (show other)
+
+
+--function' :: Type -> [(Pattern, Maybe Expression, Expression)] -> ResulT ()
+--function' TUnit = undefined
+
+typeCheckExpression env (EPatternMatching toMatch list) = do
+  type' <- reduceType <$> typeCheckExpression env toMatch
+  checkExaustiveness type' list
+  checkAllBranches type' env list
 
 -- TODO add a warning message to the elements that are not Unit type (aside from the last one of course)
 typeCheckExpression env (EProgn list) = do
