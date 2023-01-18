@@ -22,7 +22,7 @@ import Types
 import Data.List ( find, sortBy )
 import Data.Text (pack, Text, unpack, append)
 import Text.Printf ( printf )
-import Utils ( ResultT, throwError' )
+import Utils ( ResultT, throwError', printWarning )
 import Data.Traversable
 import qualified Data.Map as Map
 import Control.Monad
@@ -83,7 +83,7 @@ checkExaustiveness TUnit list = do
        function Unsatisfied (PWildcard, Nothing, _) = pure Satisfied
        function Unsatisfied (PWildcard, Just _, _) = pure Unsatisfied
        function Unsatisfied other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
-       function Satisfied _ = liftIO $ print "WARNING: Unreachable case" >> pure Satisfied
+       function Satisfied _ = printWarning "WARNING: Unreachable case" >> pure Satisfied
    satisfaction <- foldM function Unsatisfied list
    case satisfaction of
       Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)

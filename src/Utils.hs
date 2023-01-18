@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Utils ( Result, ResultT, throwError', buildMessage, buildError, printMessage, addErrorColor, addSuccessColor ) where
+module Utils ( Result, ResultT, throwError', buildMessage, buildError, printMessage, addErrorColor, addSuccessColor, printWarning ) where
 
 import Control.Monad.Except
 import Data.String ( IsString(..) )
@@ -35,3 +35,5 @@ printMessage (Right a) = justPrint $ buildMessage a
 justPrint :: T.Text -> IO ()
 justPrint = TIO.putStrLn . T.filter (/= '"')
 
+printWarning :: MonadIO m => [Char] -> m ()
+printWarning msg = liftIO . putStrLn $ "\ESC[93m" ++ msg
