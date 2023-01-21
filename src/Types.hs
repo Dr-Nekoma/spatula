@@ -273,7 +273,7 @@ data Pattern =
     PSumType Label [Pattern]
   | PVariable Label
   | PLiteral Literal
-  | PDisjunctive Pattern Pattern
+--  | PDisjunctive Pattern Pattern
   | PWildcard
   deriving (Generic, Eq, Show)
 
