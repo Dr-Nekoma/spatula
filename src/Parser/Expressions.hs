@@ -32,7 +32,7 @@ expressionsP :: ParserT st [Expression]
 expressionsP = many (skip *> expressionP <* skip) <* eof
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication, patternMatchingP]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication]
 
 exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <*> expr <* closeDelimiter
@@ -64,14 +64,14 @@ exprAbstraction = do
 --   [[Left x] [print Integer x]]
 --   [[Right x] [print String x]]]
 
-patternMatchingP :: ParserT st Expression
-patternMatchingP = do
-  openDelimiter *> string "match" *> skip
-  toMatch <- expressionP <* skip
-  let pattern' = between openDelimiter closeDelimiter ((,) <$> (skip *> variableGeneric <* skip) <*> many (skip *> variableGeneric <* skip))
-      branch = between openDelimiter closeDelimiter ((\(p, bs) expr -> (p, bs, expr)) <$> (skip *> pattern' <* skip) <*> expressionP)
-  branches <- many1 (skip *> branch <* skip) <* closeDelimiter
-  pure $ EPatternMatching toMatch branches
+-- patternMatchingP :: ParserT st Expression
+-- patternMatchingP = do
+--   openDelimiter *> string "match" *> skip
+--   toMatch <- expressionP <* skip
+--   let pattern' = between openDelimiter closeDelimiter ((,) <$> (skip *> variableGeneric <* skip) <*> many (skip *> variableGeneric <* skip))
+--       branch = between openDelimiter closeDelimiter ((\(p, bs) expr -> (p, bs, expr)) <$> (skip *> pattern' <* skip) <*> expressionP)
+--   branches <- many1 (skip *> branch <* skip) <* closeDelimiter
+--   pure $ EPatternMatching toMatch branches
 
 prognP :: ParserT st Expression
 prognP = do
@@ -105,7 +105,7 @@ readInteger Nothing = LInteger . read
 readInteger (Just _) = LInteger . negate . read
 
 unit :: ParserT st Literal
-unit = LUnit <$ string "()"
+unit = LUnit <$ string "nil"
 
 stringP :: ParserT st Literal
 stringP = do

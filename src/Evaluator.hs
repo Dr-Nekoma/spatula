@@ -105,16 +105,18 @@ evalDeclarations env list callback = foldM fun env list
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
 
-evalExpression env (EPatternMatching toMatch list) = do
-  evaluatedMatch <- evalExpression env toMatch
-  case evaluatedMatch of
-    VAlgebraic label list' -> do
-      case find (\(label', _, _) -> label' == label) list of
-        Nothing -> throwError' $ printf "ERROR: Didn't find label %s in the list of labels" (show label)
-        Just (_, binds, branch) -> do
-             let addVariablesEnv vars values e = foldr (\(var, value) acc -> Map.insert var value acc) e $ zip vars values
-             evalExpression (addVariablesEnv binds list' env) branch
-    other -> throwError' $ printf "ERROR: Expected algebraic value but got %s" (show other)
+
+evalExpression _ (EPatternMatching _ _) = undefined
+-- evalExpression env (EPatternMatching toMatch list) = do
+--   evaluatedMatch <- evalExpression env toMatch
+--   case evaluatedMatch of
+--     VAlgebraic label list' -> do
+--       case find (\(label', _, _) -> label' == label) list of
+--         Nothing -> throwError' $ printf "ERROR: Didn't find label %s in the list of labels" (show label)
+--         Just (_, binds, branch) -> do
+--              let addVariablesEnv vars values e = foldr (\(var, value) acc -> Map.insert var value acc) e $ zip vars values
+--              evalExpression (addVariablesEnv binds list' env) branch
+--     other -> throwError' $ printf "ERROR: Expected algebraic value but got %s" (show other)
 
 evalExpression env (EAlgebraic label exprs) = do
   values <- for exprs (evalExpression env)

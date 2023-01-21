@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE RankNTypes #-}
 module Typer where
 
 import Types
@@ -34,6 +35,8 @@ import qualified Data.Set as S
 import qualified Data.Text.Encoding as Option
 import Data.List
 import Data.Maybe
+import Foreign.C (CBool)
+import GHC.Stack (ccsToStrings)
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -68,29 +71,82 @@ type a = int (* After this x is still a string *)
 
 -- X :: Integer -> String -> Axis
 
-
-
 -- ArrowT _ Axis
 
 data Satisfaction = Satisfied | Unsatisfied
 
+isInfinitePrimitive :: Type -> Either Type Type
+isInfinitePrimitive TInteger = Right TInteger
+isInfinitePrimitive TRational = Right TRational
+isInfinitePrimitive TString = Right TString
+isInfinitePrimitive type' = Left type'
+
+
+-- TODO: We need to identify if a certain type can accept a certain pattern in order to not allow mixing different types of literals
+infiniteResult :: Literal -> [Pattern] -> Maybe Expression -> ResultT ([Pattern], Satisfaction)
+infiniteResult x previousPatterns guard' = do
+  case guard' of
+    Just _ -> pure (previousPatterns, Unsatisfied)
+    Nothing ->
+      let pattern' = PLiteral x in
+      if pattern' `elem` previousPatterns
+      then printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Unsatisfied)
+      else pure (pattern' : previousPatterns, Unsatisfied)
+
+foldInfinitePrimitives :: ([Pattern], Satisfaction) -> (Pattern, Maybe Expression, Expression) -> ResultT ([Pattern], Satisfaction)
+foldInfinitePrimitives (previousPatterns, Unsatisfied) (PWildcard, Nothing, _) = pure (previousPatterns, Satisfied)
+foldInfinitePrimitives (previousPatterns, Unsatisfied) (PWildcard, Just _, _) = pure (previousPatterns, Unsatisfied)
+foldInfinitePrimitives (previousPatterns, Unsatisfied) (PVariable _, Nothing, _) = pure (previousPatterns, Satisfied)
+foldInfinitePrimitives (previousPatterns, Unsatisfied) (PVariable _, Just _, _) = pure (previousPatterns, Unsatisfied)
+foldInfinitePrimitives (previousPatterns, Unsatisfied) (PLiteral literal, guard', _) = infiniteResult literal previousPatterns guard'
+foldInfinitePrimitives (_, Unsatisfied) other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
+foldInfinitePrimitives (previousPatterns, Satisfied) _ = printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Satisfied)
+
+checkSatisfaction :: [(Pattern, Maybe Expression, Expression)] -> Satisfaction -> ResultT ()
+checkSatisfaction list satisfaction = 
+  case satisfaction of
+    Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
+    Satisfied -> pure ()
+
+-- This function checks reachability and exaustiveness 
+-- For every Type, we iterate through the list of patterns check if they are possible to use
+-- for the received Type, if some pattern is unreachable.
+-- These conditions take into account if we have a guard or not.
 checkExaustiveness :: Type -> [(Pattern, Maybe Expression, Expression)] -> ResultT ()
-checkExaustiveness TUnit list = do
-   let function Unsatisfied (PLiteral LUnit, Nothing, _) = pure Satisfied
-       function Unsatisfied (PLiteral LUnit, Just _, _) = pure Unsatisfied
-       function Unsatisfied (PVariable _, Nothing, _) = pure Satisfied
-       function Unsatisfied (PVariable _, Just _, _) = pure Unsatisfied
-       function Unsatisfied (PWildcard, Nothing, _) = pure Satisfied
-       function Unsatisfied (PWildcard, Just _, _) = pure Unsatisfied
-       function Unsatisfied other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
-       function Satisfied _ = printWarning "WARNING: Unreachable case" >> pure Satisfied
-   satisfaction <- foldM function Unsatisfied list
+checkExaustiveness (isInfinitePrimitive -> Right _) list = foldM foldInfinitePrimitives ([], Unsatisfied) list >>= (checkSatisfaction list . snd)
+checkExaustiveness (isInfinitePrimitive -> Left TUnit) list = do
+   let function' Unsatisfied (PLiteral LUnit, Nothing, _) = pure Satisfied
+       function' Unsatisfied (PLiteral LUnit, Just _, _) = pure Unsatisfied
+       function' Unsatisfied (PVariable _, Nothing, _) = pure Satisfied
+       function' Unsatisfied (PVariable _, Just _, _) = pure Unsatisfied
+       function' Unsatisfied (PWildcard, Nothing, _) = pure Satisfied
+       function' Unsatisfied (PWildcard, Just _, _) = pure Unsatisfied
+       function' Unsatisfied other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
+       function' Satisfied _ = printWarning "WARNING: Unreachable case" >> pure Satisfied
+   satisfaction <- foldM function' Unsatisfied list
    case satisfaction of
       Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
       Satisfied -> pure ()
+checkExaustiveness (isInfinitePrimitive -> Left TBool) list = do
+  let function' (previousPatterns, Unsatisfied) (PLiteral (LBool b), Nothing, _) =
+        if b `elem` previousPatterns
+        then printWarning "WARNING: Unreachable case" >> pure (previousPatterns, if not b `elem` previousPatterns then Satisfied else Unsatisfied)
+        else pure (b : previousPatterns, if not b `elem` previousPatterns then Satisfied else Unsatisfied)
+      function' (previousPatterns, Unsatisfied) (PWildcard, Nothing, _) = pure (previousPatterns, Satisfied)
+      function' (previousPatterns, Unsatisfied) (PVariable _, Nothing, _) = pure (previousPatterns, Satisfied)
+  (_, satisfaction) <- foldM function' ([], Unsatisfied) list
+  case satisfaction of
+      Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
+      Satisfied -> pure ()
+checkExaustiveness _ _ = undefined      
+
+-- (a, b, (c, 3))
+-- (a, b, c)
 
 createBinds :: Type -> Pattern -> TyperEnv -> TyperEnv
-createBinds = undefined
+createBinds type' (PSumType label patterns) env = env
+createBinds type' (PVariable label) env@TyperEnv{..} = env { variableTypes = Map.insert label type' variableTypes}
+createBinds _ _ env = env
 
 keepPatternAndGuard :: (Pattern, Maybe Expression, Expression) -> (Pattern, Bool)
 keepPatternAndGuard (p, g, _) = (p, isJust g)

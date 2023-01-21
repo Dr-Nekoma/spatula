@@ -7,6 +7,7 @@ module Main (main) where
 import CL
 import Evaluator
 import Typer
+import Types
 import Data.Text ( append )
 import qualified Data.Text.IO as TIO
 import Text.Parsec (parse, ParseError)
@@ -18,6 +19,9 @@ import qualified Data.Map as Map
 import Utils
 import Repl
 
+testSample = EPatternMatching (ELiteral (LInteger 2)) [(PLiteral (LString "whatever"), Nothing, ELiteral LUnit), (PLiteral (LInteger 2), Nothing, ELiteral LUnit), (PVariable "x", Nothing, ELiteral LUnit)]
+
+--[(PWildcard, Nothing, ELiteral LUnit), (PVariable "x", Nothing, EVariable "x")]
 
 fullExecution :: String -> IO ()
 fullExecution content = do
