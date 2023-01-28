@@ -37,6 +37,7 @@ import Data.List
 import Data.Maybe
 import Foreign.C (CBool)
 import GHC.Stack (ccsToStrings)
+import Data.IntMap.Merge.Lazy (mapWhenMatched)
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -73,6 +74,9 @@ type a = int (* After this x is still a string *)
 
 -- ArrowT _ Axis
 
+-- >>> transpose [[1,2,3],[4,5,6]]
+-- [[1,4],[2,5],[3,6]]
+
 data Satisfaction = Satisfied | Unsatisfied
 
 isInfinitePrimitive :: Type -> Either Type Type
@@ -81,26 +85,44 @@ isInfinitePrimitive TRational = Right TRational
 isInfinitePrimitive TString = Right TString
 isInfinitePrimitive type' = Left type'
 
-
+isPatternType :: Type -> Pattern -> Bool
+isPatternType _ PWildcard = True
+isPatternType _ (PVariable _) = True
+isPatternType (TAlgebraic types) (PSumType label patterns) =
+  case find ((== label) . fst) types of
+    Nothing -> False
+    Just (_, list) -> (length list == length patterns) && all (==True) (zipWith isPatternType list patterns)
+isPatternType TInteger (PLiteral (LInteger _)) = True
+isPatternType TRational (PLiteral (LRational _)) = True
+isPatternType TString (PLiteral (LString _)) = True
+isPatternType TBool (PLiteral (LBool _)) = True    
+isPatternType TUnit (PLiteral LUnit) = True
+isPatternType _ _ = False
+    
 -- TODO: We need to identify if a certain type can accept a certain pattern in order to not allow mixing different types of literals
-infiniteResult :: Literal -> [Pattern] -> Maybe Expression -> ResultT ([Pattern], Satisfaction)
-infiniteResult x previousPatterns guard' = do
-  case guard' of
-    Just _ -> pure (previousPatterns, Unsatisfied)
-    Nothing ->
-      let pattern' = PLiteral x in
-      if pattern' `elem` previousPatterns
-      then printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Unsatisfied)
-      else pure (pattern' : previousPatterns, Unsatisfied)
+infiniteResult :: Type -> Literal -> [Pattern] -> Maybe Expression -> ResultT ([Pattern], Satisfaction)
+infiniteResult type' literal previousPatterns guard' = do
+  if isPatternType type' (PLiteral literal)
+  then
+    case guard' of
+      Just _ -> pure (previousPatterns, Unsatisfied)
+      Nothing ->
+           let pattern' = PLiteral literal in
+           if pattern' `elem` previousPatterns
+           then printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Unsatisfied)
+           else pure (pattern' : previousPatterns, Unsatisfied)
+  else do
+    literalType <- typeCheckExpression (TyperEnv Map.empty Map.empty Map.empty) (ELiteral literal)
+    throwError' $ printf "TYPE ERROR: Mismatched types between value of type %s and pattern %s that has type %s" (show type') (show literal) (show literalType)
 
-foldInfinitePrimitives :: ([Pattern], Satisfaction) -> (Pattern, Maybe Expression, Expression) -> ResultT ([Pattern], Satisfaction)
-foldInfinitePrimitives (previousPatterns, Unsatisfied) (PWildcard, Nothing, _) = pure (previousPatterns, Satisfied)
-foldInfinitePrimitives (previousPatterns, Unsatisfied) (PWildcard, Just _, _) = pure (previousPatterns, Unsatisfied)
-foldInfinitePrimitives (previousPatterns, Unsatisfied) (PVariable _, Nothing, _) = pure (previousPatterns, Satisfied)
-foldInfinitePrimitives (previousPatterns, Unsatisfied) (PVariable _, Just _, _) = pure (previousPatterns, Unsatisfied)
-foldInfinitePrimitives (previousPatterns, Unsatisfied) (PLiteral literal, guard', _) = infiniteResult literal previousPatterns guard'
-foldInfinitePrimitives (_, Unsatisfied) other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
-foldInfinitePrimitives (previousPatterns, Satisfied) _ = printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Satisfied)
+foldInfinitePrimitives :: Type -> ([Pattern], Satisfaction) -> (Pattern, Maybe Expression, Expression) -> ResultT ([Pattern], Satisfaction)
+foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PWildcard, Nothing, _) = pure (previousPatterns, Satisfied)
+foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PWildcard, Just _, _) = pure (previousPatterns, Unsatisfied)
+foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PVariable _, Nothing, _) = pure (previousPatterns, Satisfied)
+foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PVariable _, Just _, _) = pure (previousPatterns, Unsatisfied)
+foldInfinitePrimitives type' (previousPatterns, Unsatisfied) (PLiteral literal, guard', _) = infiniteResult type' literal previousPatterns guard'
+foldInfinitePrimitives _ (_, Unsatisfied) other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
+foldInfinitePrimitives _ (previousPatterns, Satisfied) _ = printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Satisfied)
 
 checkSatisfaction :: [(Pattern, Maybe Expression, Expression)] -> Satisfaction -> ResultT ()
 checkSatisfaction list satisfaction = 
@@ -108,13 +130,21 @@ checkSatisfaction list satisfaction =
     Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
     Satisfied -> pure ()
 
+matchSumPattern :: Text -> Pattern -> Bool
+matchSumPattern constructor (PSumType label _) = label == constructor
+matchSumPattern _ _ = False 
+
+extractPatterns :: (Pattern, Maybe Expression, Expression) -> [Pattern]
+extractPatterns  (PSumType  _ ps, _, _) = ps
+extractPatterns _ = error "This should never happen :P"
+
 -- This function checks reachability and exaustiveness 
 -- For every Type, we iterate through the list of patterns check if they are possible to use
 -- for the received Type, if some pattern is unreachable.
 -- These conditions take into account if we have a guard or not.
-checkExaustiveness :: Type -> [(Pattern, Maybe Expression, Expression)] -> ResultT ()
-checkExaustiveness (isInfinitePrimitive -> Right _) list = foldM foldInfinitePrimitives ([], Unsatisfied) list >>= (checkSatisfaction list . snd)
-checkExaustiveness (isInfinitePrimitive -> Left TUnit) list = do
+checkExhaustiveness :: Type -> [(Pattern, Maybe Expression, Expression)] -> ResultT ()
+checkExhaustiveness (isInfinitePrimitive -> Right type') list = foldM (foldInfinitePrimitives type') ([], Unsatisfied) list >>= (checkSatisfaction list . snd)
+checkExhaustiveness (isInfinitePrimitive -> Left TUnit) list = do
    let function' Unsatisfied (PLiteral LUnit, Nothing, _) = pure Satisfied
        function' Unsatisfied (PLiteral LUnit, Just _, _) = pure Unsatisfied
        function' Unsatisfied (PVariable _, Nothing, _) = pure Satisfied
@@ -127,18 +157,36 @@ checkExaustiveness (isInfinitePrimitive -> Left TUnit) list = do
    case satisfaction of
       Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
       Satisfied -> pure ()
-checkExaustiveness (isInfinitePrimitive -> Left TBool) list = do
+checkExhaustiveness (isInfinitePrimitive -> Left TBool) list = do
   let function' (previousPatterns, Unsatisfied) (PLiteral (LBool b), Nothing, _) =
         if b `elem` previousPatterns
         then printWarning "WARNING: Unreachable case" >> pure (previousPatterns, if not b `elem` previousPatterns then Satisfied else Unsatisfied)
         else pure (b : previousPatterns, if not b `elem` previousPatterns then Satisfied else Unsatisfied)
       function' (previousPatterns, Unsatisfied) (PWildcard, Nothing, _) = pure (previousPatterns, Satisfied)
       function' (previousPatterns, Unsatisfied) (PVariable _, Nothing, _) = pure (previousPatterns, Satisfied)
+      function' (_, Unsatisfied) other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
+      function' (previousPatterns, Satisfied) _ = printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Satisfied)
   (_, satisfaction) <- foldM function' ([], Unsatisfied) list
-  case satisfaction of
-      Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
-      Satisfied -> pure ()
-checkExaustiveness _ _ = undefined      
+  checkSatisfaction list satisfaction
+checkExhaustiveness (isInfinitePrimitive -> Left (TAnonymousRecord _)) _ = throwError' "TYPE ERROR: Can't pattern match anonymous records :P"
+
+-- Unreachability is not being checked with the current approach
+checkExhaustiveness (isInfinitePrimitive -> Left type'@(TAlgebraic constructors)) list = do
+  let patterns = map (\(x,_,_) -> x) list
+  if all (==True) (map (isPatternType type') patterns)
+  then do
+       let matchedSumTypes = map (\(constructor, ts) -> (constructor, ts, filter (\(p, _, _) -> matchSumPattern constructor p) list)) constructors
+           something = map (second (transpose . map extractPatterns)) matchedSumTypes
+           moreSomething = map (\(label, types, ps) -> (label, zip types ps)) something
+       result <- mapM (\(constructor, toCheck) -> do mapM_ (\(t, ps) -> checkExhaustiveness t $ map (, Nothing, ELiteral LUnit) ps) toCheck; pure constructor) moreSomething
+       pure ()
+  else throwError' "TYPE ERROR: Some patterns are wrong"
+checkExhaustiveness _ _ = undefined
+
+-- 
+
+-- [[(Left, [1, 2]), (Left, [3, 5])], [Right "String", Right "Something"]]
+
 
 -- (a, b, (c, 3))
 -- (a, b, c)
@@ -277,7 +325,7 @@ typeCheckExpression _ (EPatternMatching _ []) = throwError' "This should not be 
 
 typeCheckExpression env (EPatternMatching toMatch list) = do
   type' <- reduceType <$> typeCheckExpression env toMatch
-  checkExaustiveness type' list
+  checkExhaustiveness type' list
   checkAllBranches type' env list
 
 -- TODO add a warning message to the elements that are not Unit type (aside from the last one of course)
