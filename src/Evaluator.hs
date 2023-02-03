@@ -17,7 +17,6 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.IO.Class
 import System.IO.Unsafe
-import Data.Function
 
 type EvalEnv = Map.Map Text Value
 
@@ -112,7 +111,7 @@ createBinds2 value (PAs _ label) = pure [(label, value)]
 createBinds2 value (PDisjunctive firstPattern secondPattern) = do
   firstValues <- createBinds2 value firstPattern
   secondValues <- createBinds2 value secondPattern
-  if sortBy (compare `on` fst) firstValues == sortBy (compare `on` fst) secondValues
+  if sortOn fst firstValues == sortOn fst secondValues
     then pure firstValues
     else throwError' $ printf "ERROR: Values %s do not match values %s" (show firstValues) (show secondValues)
 createBinds2 (VAlgebraic identifier values) (PSumType label patterns) = do

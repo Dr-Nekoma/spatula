@@ -61,7 +61,7 @@ createBinds _ PWildcard = pure []
 createBinds type' p@(PDisjunctive firstPattern secondPattern) = do
   firstBinds <- createBinds type' firstPattern
   secondBinds <- createBinds type' secondPattern
-  if sortBy (compare `on` fst) firstBinds == sortBy (compare `on` fst) secondBinds
+  if sortOn fst firstBinds == sortOn fst secondBinds
     then pure firstBinds
   else throwError' $ printf "TYPE ERROR: Not all the possibilities in the Or pattern %s have the same binds" (show p)
 createBinds type' p@(PAs pattern' label) = do
