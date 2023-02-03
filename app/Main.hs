@@ -19,9 +19,7 @@ import qualified Data.Map as Map
 import Utils
 import Repl
 
-testSample = EPatternMatching (ELiteral (LInteger 2)) [(PLiteral (LString "whatever"), Nothing, ELiteral LUnit), (PLiteral (LInteger 2), Nothing, ELiteral LUnit), (PVariable "x", Nothing, ELiteral LUnit)]
-
---[(PWildcard, Nothing, ELiteral LUnit), (PVariable "x", Nothing, EVariable "x")]
+-- testSample = EPatternMatching (ELiteral (LInteger 2)) [(PLiteral (LInteger 2), Nothing, ELiteral LUnit), (PLiteral (LInteger 3), Nothing, ELiteral LUnit), (PVariable "x", Nothing, EProgn [(EVariable "x"), ELiteral LUnit])]
 
 fullExecution :: String -> IO ()
 fullExecution content = do

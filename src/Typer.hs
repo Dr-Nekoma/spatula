@@ -6,20 +6,6 @@
 module Typer where
 
 import Types
-    ( Type(..),
-      TListInfo(..),
-      TVariableInfo(..),
-      Kind(..),
-      Declaration(..),
-      Pattern(..),
-      Expression(..),
-      LetSort(..),
-      Literal(LBool, LUnit, LInteger, LRational, LString),
-      Operator(..),
-      typeSubstitution,
-      extractName,
-      renameDeclaration,
-      AbstractionInfo(AbstractionInfo) )
 import Data.List ( find, sortBy )
 import Data.Text (pack, Text, unpack, append)
 import Text.Printf ( printf )
@@ -35,6 +21,7 @@ import qualified Data.Set as S
 import qualified Data.Text.Encoding as Option
 import Data.List
 import Data.Maybe
+import qualified Data.Set as S
 import Foreign.C (CBool)
 import GHC.Stack (ccsToStrings)
 import Data.IntMap.Merge.Lazy (mapWhenMatched)
@@ -57,155 +44,94 @@ let x: a = "nathan" (* x is a string *)
 type a = int (* After this x is still a string *)
 -}
 
+data PatternMatchState =
+      SSatisfied
+    | SUnit
+    | SInt [Integer]
+    | SRational [Rational]
+    | SBool (Maybe Bool)
+    | SString [Text]
+    | SSum [(Label, [PatternMatchState])]
+    deriving (Show, Eq)
 
--- [defalgebraic Axis
---     (X Integer String) 
---     Y
---     (Z String)]
+createBinds :: Type -> Pattern -> ResultT [(Label, Type)]
+createBinds type' (PVariable label) = pure [(label, type')]
+createBinds _ PWildcard = pure []
+createBinds type' p@(PDisjunctive firstPattern secondPattern) = do
+  firstBinds <- createBinds type' firstPattern
+  secondBinds <- createBinds type' secondPattern
+  if sort firstBinds == sort secondBinds
+    then pure firstBinds
+  else throwError' $ printf "TYPE ERROR: Not all the possibilities in the Or pattern %s have the same binds" (show p)
+createBinds type' p@(PAs pattern' label) = do
+  binds <- createBinds type' pattern'
+  case find ((== label) . fst) binds of
+    Nothing -> pure $ (label, type') : binds
+    Just _ -> throwError' $ printf "TYPE ERROR: Recurrent label identified in pattern %s" (show p)
+createBinds (TAlgebraic constructors) (PSumType label patterns) = do
+  types <- case find ((== label) . fst) constructors of
+             Nothing -> throwError' $ printf "TYPE ERROR: Constructor %s could not be found" (show label)
+             Just (_, types) | length types == length patterns -> pure types
+                             | otherwise -> throwError' $ printf "TYPE ERROR: List of types %s has a different length than the length of list of patterns %s" (show types) (show patterns)
+  binds <- concat <$> zipWithM createBinds types patterns
+  foldM_ (\acc el -> if S.member el acc then throwError' "TYPE ERROR: Repeated bind found" else pure $ S.insert el acc) S.empty $ map fst binds
+  pure binds
+createBinds TInteger (PLiteral (LInteger _)) = pure []
+createBinds TRational (PLiteral (LRational _)) = pure []
+createBinds TString (PLiteral (LString _)) = pure []
+createBinds TBool (PLiteral (LBool _)) = pure []
+createBinds TUnit (PLiteral LUnit) = pure []
+createBinds type' pattern' = throwError' $ printf "TYPE ERROR: Pattern %s not valid for type %s" (show pattern') (show type')
 
+getInitialPatternMatchState :: Type -> PatternMatchState
+getInitialPatternMatchState TUnit = SUnit
+getInitialPatternMatchState TInteger = SInt []
+getInitialPatternMatchState TRational = SRational []
+getInitialPatternMatchState TString = SString []
+getInitialPatternMatchState TBool = SBool Nothing
+getInitialPatternMatchState (TAlgebraic constructors) = SSum $ map (second $ map getInitialPatternMatchState) constructors
+getInitialPatternMatchState _ = error "We have a wrong type here xD"
 
--- [defalgebraic Abc [(T Star) (U Star)]
---     (X T)
---     Y
---     (Z U)]
+getNextPatternMatchState :: PatternMatchState -> Pattern -> ResultT PatternMatchState
+getNextPatternMatchState SSatisfied pattern' = do
+  printWarning $ printf "Pattern %s is unreachable" (show pattern') 
+  pure SSatisfied
+getNextPatternMatchState _ (PVariable _) = pure SSatisfied
+getNextPatternMatchState _ PWildcard = pure SSatisfied
+getNextPatternMatchState state (PDisjunctive firstPattern secondPattern) = do
+  nextState <- getNextPatternMatchState state firstPattern
+  getNextPatternMatchState nextState secondPattern
+getNextPatternMatchState state (PAs pattern' _) = getNextPatternMatchState state pattern'
+getNextPatternMatchState (SBool Nothing) (PLiteral (LBool value)) = pure $ SBool (Just value)
+getNextPatternMatchState state@(SBool (Just pastBool)) pattern'@(PLiteral (LBool value)) = do
+  if pastBool == value
+  then printWarning (printf "Pattern %s is unreachable" (show pattern')) >> pure state
+  else pure SSatisfied
+getNextPatternMatchState state@(SInt previousIntegers) pattern'@(PLiteral (LInteger value)) = do
+  case find (==value) previousIntegers of
+    Just _ -> printWarning (printf "Pattern %s is unreachable" (show pattern')) >> pure state
+    Nothing -> pure . SInt $ value : previousIntegers
+getNextPatternMatchState (SSum constructorStates) (PSumType label constructorPatterns) = do
+   let function (identifier, states) = do
+         next <- if identifier == label then zipWithM getNextPatternMatchState states constructorPatterns else pure states
+         pure (identifier, next)
+   nextConstructorsStates <- mapM function constructorStates
+   if all (all (== SSatisfied) . snd) nextConstructorsStates
+   then pure SSatisfied
+   else pure $ SSum nextConstructorsStates
+getNextPatternMatchState state pattern' = throwError' $ printf "TYPE ERROR: Problem with next state function %s %s" (show state) (show pattern')
 
+typeCheckGuard :: TyperEnv -> Maybe Expression -> ResultT ()
+typeCheckGuard _ Nothing = pure ()
+typeCheckGuard env (Just guard') = do
+  typedGuard <- typeCheckExpression env guard'
+  case typedGuard of
+    TBool -> pure ()
+    other -> throwError' $ printf "TYPE ERROR: Encountered guard %s with type %s and it should be a boolean" (show guard') (show other)
 
--- X :: Integer -> String -> Axis
-
--- ArrowT _ Axis
-
--- >>> transpose [[1,2,3],[4,5,6]]
--- [[1,4],[2,5],[3,6]]
-
-data Satisfaction = Satisfied | Unsatisfied
-
-isInfinitePrimitive :: Type -> Either Type Type
-isInfinitePrimitive TInteger = Right TInteger
-isInfinitePrimitive TRational = Right TRational
-isInfinitePrimitive TString = Right TString
-isInfinitePrimitive type' = Left type'
-
-isPatternType :: Type -> Pattern -> Bool
-isPatternType _ PWildcard = True
-isPatternType _ (PVariable _) = True
-isPatternType (TAlgebraic types) (PSumType label patterns) =
-  case find ((== label) . fst) types of
-    Nothing -> False
-    Just (_, list) -> (length list == length patterns) && all (==True) (zipWith isPatternType list patterns)
-isPatternType TInteger (PLiteral (LInteger _)) = True
-isPatternType TRational (PLiteral (LRational _)) = True
-isPatternType TString (PLiteral (LString _)) = True
-isPatternType TBool (PLiteral (LBool _)) = True    
-isPatternType TUnit (PLiteral LUnit) = True
-isPatternType _ _ = False
-    
--- TODO: We need to identify if a certain type can accept a certain pattern in order to not allow mixing different types of literals
-infiniteResult :: Type -> Literal -> [Pattern] -> Maybe Expression -> ResultT ([Pattern], Satisfaction)
-infiniteResult type' literal previousPatterns guard' = do
-  if isPatternType type' (PLiteral literal)
-  then
-    case guard' of
-      Just _ -> pure (previousPatterns, Unsatisfied)
-      Nothing ->
-           let pattern' = PLiteral literal in
-           if pattern' `elem` previousPatterns
-           then printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Unsatisfied)
-           else pure (pattern' : previousPatterns, Unsatisfied)
-  else do
-    literalType <- typeCheckExpression (TyperEnv Map.empty Map.empty Map.empty) (ELiteral literal)
-    throwError' $ printf "TYPE ERROR: Mismatched types between value of type %s and pattern %s that has type %s" (show type') (show literal) (show literalType)
-
-foldInfinitePrimitives :: Type -> ([Pattern], Satisfaction) -> (Pattern, Maybe Expression, Expression) -> ResultT ([Pattern], Satisfaction)
-foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PWildcard, Nothing, _) = pure (previousPatterns, Satisfied)
-foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PWildcard, Just _, _) = pure (previousPatterns, Unsatisfied)
-foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PVariable _, Nothing, _) = pure (previousPatterns, Satisfied)
-foldInfinitePrimitives _ (previousPatterns, Unsatisfied) (PVariable _, Just _, _) = pure (previousPatterns, Unsatisfied)
-foldInfinitePrimitives type' (previousPatterns, Unsatisfied) (PLiteral literal, guard', _) = infiniteResult type' literal previousPatterns guard'
-foldInfinitePrimitives _ (_, Unsatisfied) other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
-foldInfinitePrimitives _ (previousPatterns, Satisfied) _ = printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Satisfied)
-
-checkSatisfaction :: [(Pattern, Maybe Expression, Expression)] -> Satisfaction -> ResultT ()
-checkSatisfaction list satisfaction = 
-  case satisfaction of
-    Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
-    Satisfied -> pure ()
-
-matchSumPattern :: Text -> Pattern -> Bool
-matchSumPattern constructor (PSumType label _) = label == constructor
-matchSumPattern _ _ = False 
-
-extractPatterns :: (Pattern, Maybe Expression, Expression) -> [Pattern]
-extractPatterns  (PSumType  _ ps, _, _) = ps
-extractPatterns _ = error "This should never happen :P"
-
--- This function checks reachability and exaustiveness 
--- For every Type, we iterate through the list of patterns check if they are possible to use
--- for the received Type, if some pattern is unreachable.
--- These conditions take into account if we have a guard or not.
-checkExhaustiveness :: Type -> [(Pattern, Maybe Expression, Expression)] -> ResultT ()
-checkExhaustiveness (isInfinitePrimitive -> Right type') list = foldM (foldInfinitePrimitives type') ([], Unsatisfied) list >>= (checkSatisfaction list . snd)
-checkExhaustiveness (isInfinitePrimitive -> Left TUnit) list = do
-   let function' Unsatisfied (PLiteral LUnit, Nothing, _) = pure Satisfied
-       function' Unsatisfied (PLiteral LUnit, Just _, _) = pure Unsatisfied
-       function' Unsatisfied (PVariable _, Nothing, _) = pure Satisfied
-       function' Unsatisfied (PVariable _, Just _, _) = pure Unsatisfied
-       function' Unsatisfied (PWildcard, Nothing, _) = pure Satisfied
-       function' Unsatisfied (PWildcard, Just _, _) = pure Unsatisfied
-       function' Unsatisfied other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
-       function' Satisfied _ = printWarning "WARNING: Unreachable case" >> pure Satisfied
-   satisfaction <- foldM function' Unsatisfied list
-   case satisfaction of
-      Unsatisfied -> throwError' $ printf "TYPE ERROR: Couldn't satisfy exaustiveness with %s" (show list)
-      Satisfied -> pure ()
-checkExhaustiveness (isInfinitePrimitive -> Left TBool) list = do
-  let function' (previousPatterns, Unsatisfied) (PLiteral (LBool b), Nothing, _) =
-        if b `elem` previousPatterns
-        then printWarning "WARNING: Unreachable case" >> pure (previousPatterns, if not b `elem` previousPatterns then Satisfied else Unsatisfied)
-        else pure (b : previousPatterns, if not b `elem` previousPatterns then Satisfied else Unsatisfied)
-      function' (previousPatterns, Unsatisfied) (PWildcard, Nothing, _) = pure (previousPatterns, Satisfied)
-      function' (previousPatterns, Unsatisfied) (PVariable _, Nothing, _) = pure (previousPatterns, Satisfied)
-      function' (_, Unsatisfied) other = throwError' $ printf "TYPE ERROR: Couldn't match %s" (show other)
-      function' (previousPatterns, Satisfied) _ = printWarning "WARNING: Unreachable case" >> pure (previousPatterns, Satisfied)
-  (_, satisfaction) <- foldM function' ([], Unsatisfied) list
-  checkSatisfaction list satisfaction
-checkExhaustiveness (isInfinitePrimitive -> Left (TAnonymousRecord _)) _ = throwError' "TYPE ERROR: Can't pattern match anonymous records :P"
-
--- Unreachability is not being checked with the current approach
-checkExhaustiveness (isInfinitePrimitive -> Left type'@(TAlgebraic constructors)) list = do
-  let patterns = map (\(x,_,_) -> x) list
-  if all (==True) (map (isPatternType type') patterns)
-  then do
-       let matchedSumTypes = map (\(constructor, ts) -> (constructor, ts, filter (\(p, _, _) -> matchSumPattern constructor p) list)) constructors
-           something = map (second (transpose . map extractPatterns)) matchedSumTypes
-           moreSomething = map (\(label, types, ps) -> (label, zip types ps)) something
-       result <- mapM (\(constructor, toCheck) -> do mapM_ (\(t, ps) -> checkExhaustiveness t $ map (, Nothing, ELiteral LUnit) ps) toCheck; pure constructor) moreSomething
-       pure ()
-  else throwError' "TYPE ERROR: Some patterns are wrong"
-checkExhaustiveness _ _ = undefined
-
--- 
-
--- [[(Left, [1, 2]), (Left, [3, 5])], [Right "String", Right "Something"]]
-
-
--- (a, b, (c, 3))
--- (a, b, c)
-
-createBinds :: Type -> Pattern -> TyperEnv -> TyperEnv
-createBinds type' (PSumType label patterns) env = env
-createBinds type' (PVariable label) env@TyperEnv{..} = env { variableTypes = Map.insert label type' variableTypes}
-createBinds _ _ env = env
-
-keepPatternAndGuard :: (Pattern, Maybe Expression, Expression) -> (Pattern, Bool)
-keepPatternAndGuard (p, g, _) = (p, isJust g)
-
-checkAllBranches :: Type -> TyperEnv -> [(Pattern, Maybe Expression, Expression)] -> ResultT Type
-checkAllBranches type' env list = do
-  types' <- for list (\(pattern',_,branch) -> reduceType <$> typeCheckExpression (createBinds type' pattern' env) branch)
-  let x = head types'
-  if all (==x) types'
-  then pure x
-  else throwError' $ printf "TYPE ERROR: Not all the types in branches %s are the same" (show types')
+checkMatchBody :: Maybe Type -> Type -> ResultT ()
+checkMatchBody Nothing _ = pure ()
+checkMatchBody (Just expectedType) bodyType = if expectedType == bodyType then pure () else throwError' $ printf "TYPE ERROR: Expected body type %s and found type %s" (show expectedType) (show bodyType)
 
 addFunctionsToEnv :: TyperEnv -> Text -> [(TVariableInfo, Kind)] -> Type -> TyperEnv
 addFunctionsToEnv _ _ _ (TAlgebraic []) = error "This should be impossible. Great job Lemos with the Parser"
@@ -300,33 +226,23 @@ typeCheckExpression _ (EAlgebraic _ _) = throwError' "We tried to type check an 
 
 typeCheckExpression _ (EPatternMatching _ []) = throwError' "This should not be possible. Good job with the parser Lemos"
 
--- typeCheckExpression env@TyperEnv{..} (EPatternMatching toMatch list) = do
---   potentialSumType <- reduceType <$> typeCheckExpression env toMatch
---   case potentialSumType of
---     TAlgebraic sumTypes -> do
---       let (sumTypes', types') = unzip $ map (\(name, types) -> ((name, length types), types)) $ sort sumTypes
---           sortTriplet (n1, _, _) (n2, _, _) = compare n1 n2
---           (list', branchesAndBinds) = unzip $ map (\(name, binds, branch) -> ((name, length binds), (branch, binds))) $ sortBy sortTriplet list
---       if sumTypes' == list'
---         then do
---           let branchesBindsTypes = zip branchesAndBinds types'
---               addVariablesEnv vars ts e = e { variableTypes = foldr (\(var, type') acc -> Map.insert var type' acc) variableTypes $ zip vars ts }
---           branchesTypes <- for branchesBindsTypes (\((branch, binds), ts') -> reduceType <$> typeCheckExpression (addVariablesEnv binds ts' env) branch)
---           let type' = head branchesTypes
---           if all (== type') branchesTypes
---             then return type'
---             else throwError' $ printf  "TYPE ERROR: Branch types diverge. %s" (show branchesTypes)
---         else throwError' $ printf "TYPE ERROR: Constructor name or how many binds are wrong. Expected %s and got %s" (show sumTypes') (show list')
---     other -> throwError' $ printf "TYPE ERROR: Expected sum type but got %s" (show other)
-
-
---function' :: Type -> [(Pattern, Maybe Expression, Expression)] -> ResulT ()
---function' TUnit = undefined
-
-typeCheckExpression env (EPatternMatching toMatch list) = do
+typeCheckExpression env@TyperEnv{..} (EPatternMatching toMatch list) = do
   type' <- reduceType <$> typeCheckExpression env toMatch
-  checkExhaustiveness type' list
-  checkAllBranches type' env list
+  let folder (expectedType, state) (pattern', guard', body) = do
+        binds <- createBinds type' pattern'
+        let newEnv = env { variableTypes = foldl f variableTypes binds }
+            f acc (label, internalType) = Map.insert label internalType acc
+        typeCheckGuard newEnv guard'
+        bodyType <- typeCheckExpression newEnv body
+        checkMatchBody expectedType bodyType
+        nextState <- getNextPatternMatchState state pattern'
+        pure (Just bodyType, if isJust guard' then state else nextState)
+  (expectedBodyType, state) <- foldM folder (Nothing, getInitialPatternMatchState type') list
+  case state of
+    SSatisfied -> pure $ fromJust expectedBodyType
+    other -> do
+      printWarning (printf "Non-exhaustive patterns! Pattern match state ended with %s" (show other))
+      pure $ fromJust expectedBodyType
 
 -- TODO add a warning message to the elements that are not Unit type (aside from the last one of course)
 typeCheckExpression env (EProgn list) = do

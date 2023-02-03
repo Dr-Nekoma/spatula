@@ -272,9 +272,10 @@ type Field = (Label, Expression)
 data Pattern =
     PSumType Label [Pattern]
   | PVariable Label
-  | PLiteral Literal
---  | PDisjunctive Pattern Pattern
   | PWildcard
+  | PLiteral Literal
+  | PDisjunctive Pattern Pattern
+  | PAs Pattern Label
   deriving (Generic, Eq, Show)
 
 instance Arbitrary Pattern where
