@@ -19,6 +19,7 @@ import Control.Monad.IO.Class
 import Data.Either.Extra
 import qualified Data.Set as S
 import qualified Data.Text.Encoding as Option
+import Data.Function
 import Data.List
 import Data.Maybe
 import qualified Data.Set as S
@@ -60,7 +61,7 @@ createBinds _ PWildcard = pure []
 createBinds type' p@(PDisjunctive firstPattern secondPattern) = do
   firstBinds <- createBinds type' firstPattern
   secondBinds <- createBinds type' secondPattern
-  if sort firstBinds == sort secondBinds
+  if sortBy (compare `on` fst) firstBinds == sortBy (compare `on` fst) secondBinds
     then pure firstBinds
   else throwError' $ printf "TYPE ERROR: Not all the possibilities in the Or pattern %s have the same binds" (show p)
 createBinds type' p@(PAs pattern' label) = do

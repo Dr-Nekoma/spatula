@@ -14,8 +14,10 @@ import Control.Monad ( foldM )
 import Data.List
 import Data.Bifunctor ( Bifunctor(second) )
 import Data.Maybe
+import Control.Monad
 import Control.Monad.IO.Class
 import System.IO.Unsafe
+import Data.Function
 
 type EvalEnv = Map.Map Text Value
 
@@ -103,21 +105,42 @@ evalDeclarations env list callback = foldM fun env list
         fun acc (callback -> (DeclModule name decls)) = do
           evalDeclarations acc decls (renameDeclaration (append name ":"))
 
+createBinds2 :: Value -> Pattern -> ResultT [(Label, Value)]
+createBinds2 _ PWildcard = pure []
+createBinds2 value (PVariable label) = pure [(label, value)]
+createBinds2 value (PAs _ label) = pure [(label, value)]
+createBinds2 value (PDisjunctive firstPattern secondPattern) = do
+  firstValues <- createBinds2 value firstPattern
+  secondValues <- createBinds2 value secondPattern
+  if sortBy (compare `on` fst) firstValues == sortBy (compare `on` fst) secondValues
+    then pure firstValues
+    else throwError' $ printf "ERROR: Values %s do not match values %s" (show firstValues) (show secondValues)
+createBinds2 (VAlgebraic identifier values) (PSumType label patterns) = do
+  if identifier == label
+    then concat <$> zipWithM createBinds2 values patterns
+  else throwError' $ printf "ERROR: Expected to find label %s and found %s" (show identifier) (show label)
+createBinds2 _ _ = pure []
+
 evalExpression :: EvalEnv -> Expression -> ResultT Value
 
+evalExpression _ (EPatternMatching _ []) = throwError' "This should never happen. Good job with the parsing Lemos xD."
 
-evalExpression _ (EPatternMatching _ _) = undefined
--- evalExpression env (EPatternMatching toMatch list) = do
---   evaluatedMatch <- evalExpression env toMatch
---   case evaluatedMatch of
---     VAlgebraic label list' -> do
---       case find (\(label', _, _) -> label' == label) list of
---         Nothing -> throwError' $ printf "ERROR: Didn't find label %s in the list of labels" (show label)
---         Just (_, binds, branch) -> do
---              let addVariablesEnv vars values e = foldr (\(var, value) acc -> Map.insert var value acc) e $ zip vars values
---              evalExpression (addVariablesEnv binds list' env) branch
---     other -> throwError' $ printf "ERROR: Expected algebraic value but got %s" (show other)
-
+evalExpression env (EPatternMatching toMatch list) = do
+  evaluatedMatch <- evalExpression env toMatch
+  let folder Nothing (pattern', guard', body) = do
+        binds <- createBinds2 evaluatedMatch pattern'
+        let newEnv = Map.union env $ Map.fromList binds
+        case guard' of
+          Nothing -> pure Nothing
+          Just g -> do
+            evaluatedGuard <- evalExpression newEnv g
+            case evaluatedGuard of
+              VLiteral (LBool True) -> pure $ Just (newEnv, body)
+              _ -> pure Nothing
+      folder envBody _ = pure envBody
+  envBody <- foldM folder Nothing list
+  maybe (throwError' $ printf "ERROR: Could not evaluate %s in pattern match" (show toMatch)) (uncurry evalExpression) envBody
+  
 evalExpression env (EAlgebraic label exprs) = do
   values <- for exprs (evalExpression env)
   pure $ VAlgebraic label values

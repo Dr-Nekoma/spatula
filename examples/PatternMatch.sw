@@ -9,7 +9,8 @@
 
 [defun match-unit [(value Unit)] : Unit
   [match value
-    [[name] [print !String "First branch"]]
-    [[_] [print !String x]]]]
+    [[name :when [< 1 2]] [print !String "First branch"]]
+    [[[name :when [< 1 2]] :or [1] :or [x]] [print !String "First branch"]]
+    [[_ :as x] [print !String x]]]]
 
 [print-either [Left !String !Integer "This is a test"]]
