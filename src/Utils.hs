@@ -36,4 +36,4 @@ justPrint :: T.Text -> IO ()
 justPrint = TIO.putStrLn . T.filter (/= '"')
 
 printWarning :: MonadIO m => [Char] -> m ()
-printWarning msg = liftIO . putStrLn $ "\ESC[93m" ++ msg
+printWarning msg = liftIO . putStrLn $ "\ESC[93m" ++ msg ++ "\ESC[00m"

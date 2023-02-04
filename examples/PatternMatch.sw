@@ -1,16 +1,19 @@
-[defalgebraic Either[(T Star) (U Star)]
-  (Left T)
-  (Right U)]
+[defalgebraic Anything
+  A
+  B]
 
-[defun print-either [(either |Either String Integer|)] : Unit
-  [match either
-    [[Right y] [print !Integer y]]
-    [[Left x] [print !String x]]]]
+[defalgebraic Something
+  C
+  D
+  E]
 
-[defun match-unit [(value Unit)] : Unit
-  [match value
-    [[name :when [< 1 2]] [print !String "First branch"]]
-    [[[name :when [< 1 2]] :or [1] :or [x]] [print !String "First branch"]]
-    [[_ :as x] [print !String x]]]]
+[defalgebraic Tuple
+  (Left Anything Something)]
 
-[print-either [Left !String !Integer "This is a test"]]
+[defun print-tuple [(tuple Tuple)] : Unit
+  [match 10
+    [[1] [print !String "This is the first branch 2"]]
+    [[1] :when T [print !String "This is the first branch 1"]]
+    [[_] [print !String "This is the first branch 3"]]]]    
+
+[print-tuple [Left A C]]

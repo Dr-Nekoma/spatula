@@ -17,6 +17,7 @@ import Data.Maybe
 import Control.Monad
 import Control.Monad.IO.Class
 import System.IO.Unsafe
+import Data.List.Extra (firstJust)
 
 type EvalEnv = Map.Map Text Value
 
@@ -104,21 +105,18 @@ evalDeclarations env list callback = foldM fun env list
         fun acc (callback -> (DeclModule name decls)) = do
           evalDeclarations acc decls (renameDeclaration (append name ":"))
 
-createBinds2 :: Value -> Pattern -> ResultT [(Label, Value)]
-createBinds2 _ PWildcard = pure []
-createBinds2 value (PVariable label) = pure [(label, value)]
-createBinds2 value (PAs _ label) = pure [(label, value)]
-createBinds2 value (PDisjunctive firstPattern secondPattern) = do
-  firstValues <- createBinds2 value firstPattern
-  secondValues <- createBinds2 value secondPattern
-  if sortOn fst firstValues == sortOn fst secondValues
-    then pure firstValues
-    else throwError' $ printf "ERROR: Values %s do not match values %s" (show firstValues) (show secondValues)
-createBinds2 (VAlgebraic identifier values) (PSumType label patterns) = do
-  if identifier == label
-    then concat <$> zipWithM createBinds2 values patterns
-  else throwError' $ printf "ERROR: Expected to find label %s and found %s" (show identifier) (show label)
-createBinds2 _ _ = pure []
+createBinds2 :: Value -> Pattern -> Maybe [(Label, Value)]
+createBinds2 _ PWildcard = Just []
+createBinds2 value (PVariable label) = Just [(label, value)]
+createBinds2 value (PAs pattern' label) = (:) (label, value) <$> createBinds2 value pattern'
+createBinds2 value (PDisjunctive firstPattern secondPattern) = firstJust (createBinds2 value) [firstPattern, secondPattern]
+createBinds2 (VAlgebraic identifier values) (PSumType constructor patterns) =
+  if identifier == constructor
+  then concat <$> zipWithM createBinds2 values patterns
+  else Nothing
+createBinds2 VUnit (PLiteral LUnit) = Just []
+createBinds2 (VLiteral value') (PLiteral value) = if value == value' then Just [] else Nothing
+createBinds2 _ _ = Nothing
 
 evalExpression :: EvalEnv -> Expression -> ResultT Value
 
@@ -127,18 +125,20 @@ evalExpression _ (EPatternMatching _ []) = throwError' "This should never happen
 evalExpression env (EPatternMatching toMatch list) = do
   evaluatedMatch <- evalExpression env toMatch
   let folder Nothing (pattern', guard', body) = do
-        binds <- createBinds2 evaluatedMatch pattern'
-        let newEnv = Map.union env $ Map.fromList binds
-        case guard' of
+        case createBinds2 evaluatedMatch pattern' of
           Nothing -> pure Nothing
-          Just g -> do
-            evaluatedGuard <- evalExpression newEnv g
-            case evaluatedGuard of
-              VLiteral (LBool True) -> pure $ Just (newEnv, body)
-              _ -> pure Nothing
-      folder envBody _ = pure envBody
-  envBody <- foldM folder Nothing list
-  maybe (throwError' $ printf "ERROR: Could not evaluate %s in pattern match" (show toMatch)) (uncurry evalExpression) envBody
+          Just binds -> do 
+            let newEnv = Map.union (Map.fromList binds) env
+            case guard' of
+              Nothing -> Just <$> evalExpression newEnv body
+              Just g -> do
+                evaluatedGuard <- evalExpression newEnv g
+                case evaluatedGuard of
+                  VLiteral (LBool True) -> Just <$> evalExpression newEnv body
+                  _ -> pure Nothing
+      folder expr _ = pure expr
+  expr <- foldM folder Nothing list
+  maybe (throwError' $ printf "ERROR: Could not evaluate %s in pattern match" (show toMatch)) pure expr
   
 evalExpression env (EAlgebraic label exprs) = do
   values <- for exprs (evalExpression env)

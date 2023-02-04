@@ -38,7 +38,7 @@ defadtP :: ParserT st Declaration
 defadtP = do
   openDelimiter *> skip *> string "defalgebraic" <* skip
   name <- variableGeneric <* skip
-  namedKinds <- skip *> optionMaybe (openDelimiter *> many1 (argAnd kindP) <* closeDelimiter) <* skip
+  namedKinds <- skip *> optionMaybe (openDelimiter *> many (argAnd kindP) <* closeDelimiter) <* skip
   let nullaryP = (\name -> (name, [])) <$> (skip *> variableGeneric <* skip)
       tagP = (,) <$> (skip *> char '(' *> variableGeneric) <*> (skip *> many1 (typeP <* skip)) <* char ')' <* skip
   types <- many1 (skip *> (choice $ fmap try [nullaryP, tagP]) <* skip) <* closeDelimiter <* skip

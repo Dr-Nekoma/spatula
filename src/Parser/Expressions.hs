@@ -32,7 +32,7 @@ expressionsP :: ParserT st [Expression]
 expressionsP = many (skip *> expressionP <* skip) <* eof
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication, patternMatchingP]
 
 exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <*> expr <* closeDelimiter
@@ -64,14 +64,44 @@ exprAbstraction = do
 --   [[Left x] [print Integer x]]
 --   [[Right x] [print String x]]]
 
--- patternMatchingP :: ParserT st Expression
--- patternMatchingP = do
---   openDelimiter *> string "match" *> skip
---   toMatch <- expressionP <* skip
---   let pattern' = between openDelimiter closeDelimiter ((,) <$> (skip *> variableGeneric <* skip) <*> many (skip *> variableGeneric <* skip))
---       branch = between openDelimiter closeDelimiter ((\(p, bs) expr -> (p, bs, expr)) <$> (skip *> pattern' <* skip) <*> expressionP)
---   branches <- many1 (skip *> branch <* skip) <* closeDelimiter
---   pure $ EPatternMatching toMatch branches
+patternP :: ParserT st Pattern
+patternP = between openDelimiter closeDelimiter $ choice $ fmap try [patternLiteral, patternAs, patternDisjunctive, patternSumType, patternWildCard, patternVariable]
+
+guard :: ParserT st Expression
+guard = skip *> string ":when" *> skip *> expressionP <* skip
+
+patternWildCard :: ParserT st Pattern
+patternWildCard = PWildcard <$ string "_"
+
+patternVariable :: ParserT st Pattern
+patternVariable = PVariable <$> variableGeneric
+
+patternLiteral :: ParserT st Pattern
+patternLiteral = PLiteral <$> literal
+
+patternAs :: ParserT st Pattern
+patternAs = PAs <$> (skip *> string ":with" *> skip *> patternP <* skip) <*> (string ":as" *> skip *> variableGeneric <* skip)
+
+patternDisjunctive :: ParserT st Pattern
+patternDisjunctive = do
+  first <-  skip *> string ":or" *> skip *> patternP <* skip 
+  others <- many1 (patternP <* skip)
+  pure $ foldl PDisjunctive first others
+
+patternSumType :: ParserT st Pattern
+patternSumType = PSumType <$> (skip *> string "!" *> variableGeneric <* skip) <*> many (skip *> patternP <* skip)
+
+-- [match value
+--  [[1 :when [< 1 2]] [print stuff]]]
+
+patternMatchingP :: ParserT st Expression
+patternMatchingP = do
+  openDelimiter *> skip *> string "match" *> skip
+  toMatch <- expressionP <* skip
+  let guardedPattern = (,) <$> (skip *> patternP <* skip) <*> (optionMaybe guard <* skip)
+      branch = between openDelimiter closeDelimiter ((\(p, g) expr -> (p, g, expr)) <$> (skip *> guardedPattern <* skip) <*> expressionP)
+  branches <- many1 (skip *> branch <* skip) <* closeDelimiter
+  pure $ EPatternMatching toMatch branches
 
 prognP :: ParserT st Expression
 prognP = do

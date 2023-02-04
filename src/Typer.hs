@@ -116,10 +116,10 @@ getNextPatternMatchState (SSum constructorStates) (PSumType label constructorPat
    let function (identifier, states) = do
          next <- if identifier == label then zipWithM getNextPatternMatchState states constructorPatterns else pure states
          pure (identifier, next)
-   nextConstructorsStates <- mapM function constructorStates
-   if all (all (== SSatisfied) . snd) nextConstructorsStates
+   nextConstructorStates <- mapM function $ filter (\(ident, states) -> not $ null states && ident == label) constructorStates
+   if all (\(_, l) -> not (null l) && all (== SSatisfied) l) nextConstructorStates
    then pure SSatisfied
-   else pure $ SSum nextConstructorsStates
+   else pure $ SSum nextConstructorStates
 getNextPatternMatchState state pattern' = throwError' $ printf "TYPE ERROR: Problem with next state function %s %s" (show state) (show pattern')
 
 typeCheckGuard :: TyperEnv -> Maybe Expression -> ResultT ()
@@ -132,7 +132,10 @@ typeCheckGuard env (Just guard') = do
 
 checkMatchBody :: Maybe Type -> Type -> ResultT ()
 checkMatchBody Nothing _ = pure ()
-checkMatchBody (Just expectedType) bodyType = if expectedType == bodyType then pure () else throwError' $ printf "TYPE ERROR: Expected body type %s and found type %s" (show expectedType) (show bodyType)
+checkMatchBody (Just expectedType) bodyType =
+  if expectedType == bodyType
+  then pure ()
+  else throwError' $ printf "TYPE ERROR: Expected body type %s and found type %s" (show expectedType) (show bodyType)
 
 addFunctionsToEnv :: TyperEnv -> Text -> [(TVariableInfo, Kind)] -> Type -> TyperEnv
 addFunctionsToEnv _ _ _ (TAlgebraic []) = error "This should be impossible. Great job Lemos with the Parser"
@@ -224,8 +227,6 @@ typeCheckExpression env (EList list) = do
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
 
 typeCheckExpression _ (EAlgebraic _ _) = throwError' "We tried to type check an EAlgebraic"
-
-typeCheckExpression _ (EPatternMatching _ []) = throwError' "This should not be possible. Good job with the parser Lemos"
 
 typeCheckExpression env@TyperEnv{..} (EPatternMatching toMatch list) = do
   type' <- reduceType <$> typeCheckExpression env toMatch
