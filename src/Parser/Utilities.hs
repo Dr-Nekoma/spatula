@@ -2,6 +2,8 @@
 module Parser.Utilities
   (
     ParserT
+  , Keyword(..)
+  , Delimiter(..)
   , typeVariableGeneric
   , variableGeneric
   , delimiters
@@ -46,11 +48,12 @@ data Delimiter =
   | LeftBraces
   | RightBraces
   | ListDelimiter
-  | RecordDelimiter
+  | RecordLeftDelimiter
+  | RecordRightDelimiter  
   | BeginCommentBlock
   | CloseCommentBlock
   | LineComment
-  | ForallDelimiter
+  | ForallDelimiter  
   deriving (Enum, Bounded)
   
 instance Show Delimiter where
@@ -61,11 +64,12 @@ instance Show Delimiter where
   show LeftBraces = "{"   
   show RightBraces = "}"
   show ListDelimiter = "'"
-  show RecordDelimiter = "|"
+  show RecordLeftDelimiter = "{|"
+  show RecordRightDelimiter = "|}"  
   show BeginCommentBlock = "{;"
   show CloseCommentBlock = ";}"
   show LineComment = "//"
-  show ForallDelimiter = "."
+  show ForallDelimiter = ","
 
 data Keyword =
     Lambda 
@@ -78,6 +82,11 @@ data Keyword =
   | RecordGet
   | RecordSet
   | Match
+  | Unit
+  | DisjunctivePattern
+  | Guard
+  | NamedPattern1
+  | NamedPattern2
   deriving (Enum, Bounded)
 
 instance Show Keyword where
@@ -91,6 +100,11 @@ instance Show Keyword where
   show RecordGet = "getr"
   show RecordSet = "setr"
   show Match = "match"
+  show Unit = "nil"
+  show DisjunctivePattern = ":or"
+  show Guard = ":when"
+  show NamedPattern1 = ":with"
+  show NamedPattern2 = ":as"
 
 delimiters :: [String]
 delimiters = map show ([minBound .. maxBound] :: [Delimiter])

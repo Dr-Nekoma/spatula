@@ -35,7 +35,7 @@ expressionP :: ParserT st Expression
 expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication, patternMatchingP]
 
 exprCondition :: ParserT st Expression
-exprCondition = ECondition <$> (openDelimiter *> string "if" *> expr) <*> expr <*> expr <* closeDelimiter
+exprCondition = ECondition <$> (openDelimiter *> string (show If) *> expr) <*> expr <*> expr <* closeDelimiter
   where expr = skip *> expressionP <* skip
 
 arguments :: ParserT st [Either (TVariableInfo, Kind) (Text, Type)]
@@ -51,24 +51,20 @@ foldArgs args returnType body =
   in Prelude.foldr fun first (Prelude.init args)
 
 anonymousRecordP :: ParserT st Expression
-anonymousRecordP = EAnonymousRecord <$> (string "{|" *> skip *> many1 (argAnd expressionP) <* skip <* string "|}")
+anonymousRecordP = EAnonymousRecord <$> (string (show RecordLeftDelimiter) *> skip *> many1 (argAnd expressionP) <* skip <* string (show RecordRightDelimiter))
   
 exprAbstraction :: ParserT st Expression
 exprAbstraction = do
-  openDelimiter *> string "lambda" *> skip
+  openDelimiter *> string (show Lambda) *> skip
   args <- arguments
   (returnType, body) <- (,) <$> (skip *> optionMaybe (skip *> char ':' *> skip *> typeP <* skip)) <*> many1 (expressionP <* skip) <* closeDelimiter
   pure $ foldArgs args returnType body
-
--- [match v
---   [[Left x] [print Integer x]]
---   [[Right x] [print String x]]]
 
 patternP :: ParserT st Pattern
 patternP = between openDelimiter closeDelimiter $ choice $ fmap try [patternLiteral, patternAs, patternDisjunctive, patternSumType, patternWildCard, patternVariable]
 
 guard :: ParserT st Expression
-guard = skip *> string ":when" *> skip *> expressionP <* skip
+guard = skip *> string (show Guard) *> skip *> expressionP <* skip
 
 patternWildCard :: ParserT st Pattern
 patternWildCard = PWildcard <$ string "_"
@@ -80,23 +76,20 @@ patternLiteral :: ParserT st Pattern
 patternLiteral = PLiteral <$> literal
 
 patternAs :: ParserT st Pattern
-patternAs = PAs <$> (skip *> string ":with" *> skip *> patternP <* skip) <*> (string ":as" *> skip *> variableGeneric <* skip)
+patternAs = PAs <$> (skip *> string (show NamedPattern1) *> skip *> patternP <* skip) <*> (string (show NamedPattern2) *> skip *> variableGeneric <* skip)
 
 patternDisjunctive :: ParserT st Pattern
 patternDisjunctive = do
-  first <-  skip *> string ":or" *> skip *> patternP <* skip 
+  first <-  skip *> string (show DisjunctivePattern) *> skip *> patternP <* skip 
   others <- many1 (patternP <* skip)
   pure $ foldl PDisjunctive first others
 
 patternSumType :: ParserT st Pattern
 patternSumType = PSumType <$> (skip *> string "!" *> variableGeneric <* skip) <*> many (skip *> patternP <* skip)
 
--- [match value
---  [[1 :when [< 1 2]] [print stuff]]]
-
 patternMatchingP :: ParserT st Expression
 patternMatchingP = do
-  openDelimiter *> skip *> string "match" *> skip
+  openDelimiter *> skip *> string (show Match) *> skip
   toMatch <- expressionP <* skip
   let guardedPattern = (,) <$> (skip *> patternP <* skip) <*> (optionMaybe guard <* skip)
       branch = between openDelimiter closeDelimiter ((\(p, g) expr -> (p, g, expr)) <$> (skip *> guardedPattern <* skip) <*> expressionP)
@@ -106,17 +99,17 @@ patternMatchingP = do
 prognP :: ParserT st Expression
 prognP = do
   let elements = many (skip *> expressionP <* skip)
-  between (openDelimiter *> string "progn" *> skip) closeDelimiter (EProgn <$> (elements <* skip))
+  between (openDelimiter *> string (show Progn) *> skip) closeDelimiter (EProgn <$> (elements <* skip))
 
 recordProjectionP :: ParserT st Expression
-recordProjectionP = between (openDelimiter *> string "getr" *> skip) closeDelimiter (ERecordProjection <$> expressionP <*> (skip *> variableGeneric <* skip))
+recordProjectionP = between (openDelimiter *> string (show RecordGet) *> skip) closeDelimiter (ERecordProjection <$> expressionP <*> (skip *> variableGeneric <* skip))
 
 recordUpdateP :: ParserT st Expression
-recordUpdateP = between (openDelimiter *> string "setr" *> skip) closeDelimiter (ERecordUpdate <$> expressionP <*> (skip *> listP (argAnd expressionP) <* skip))
+recordUpdateP = between (openDelimiter *> string (show RecordSet) *> skip) closeDelimiter (ERecordUpdate <$> expressionP <*> (skip *> listP (argAnd expressionP) <* skip))
 
 letP :: ParserT st Expression
 letP = 
-  let letSortP = choice $ fmap (try . (openDelimiter *> skip *>)) [In <$ string "let-in", Plus <$ string "let+"]
+  let letSortP = choice $ fmap (try . (openDelimiter *> skip *>)) [In <$ string (show LetIn), Plus <$ string (show LetPlus)]
       couple = between openDelimiter closeDelimiter ((,) <$> variableGeneric <*> (skip *> expressionP <* skip))
       binds = between openDelimiter closeDelimiter (many (skip *> couple <* skip))
   in ELet <$> letSortP <*> (skip *> binds <* skip) <*> (expressionP <* skip <* closeDelimiter)
@@ -135,7 +128,7 @@ readInteger Nothing = LInteger . read
 readInteger (Just _) = LInteger . negate . read
 
 unit :: ParserT st Literal
-unit = LUnit <$ string "nil"
+unit = LUnit <$ string (show Unit)
 
 stringP :: ParserT st Literal
 stringP = do

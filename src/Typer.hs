@@ -16,6 +16,7 @@ import Control.Monad
 import SWPrelude()
 import Data.Bifunctor ( Bifunctor(second) )
 import Control.Monad.IO.Class
+import Control.Monad.Extra
 import Data.Either.Extra
 import qualified Data.Set as S
 import qualified Data.Text.Encoding as Option
@@ -113,11 +114,15 @@ getNextPatternMatchState state@(SInt previousIntegers) pattern'@(PLiteral (LInte
     Just _ -> printWarning (printf "Pattern %s is unreachable" (show pattern')) >> pure state
     Nothing -> pure . SInt $ value : previousIntegers
 getNextPatternMatchState (SSum constructorStates) (PSumType label constructorPatterns) = do
-   let function (identifier, states) = do
-         next <- if identifier == label then zipWithM getNextPatternMatchState states constructorPatterns else pure states
-         pure (identifier, next)
-   nextConstructorStates <- mapM function $ filter (\(ident, states) -> not $ null states && ident == label) constructorStates
-   if all (\(_, l) -> not (null l) && all (== SSatisfied) l) nextConstructorStates
+   let function element@(identifier, states) = do
+         if identifier == label
+           then do next <- zipWithM getNextPatternMatchState states constructorPatterns
+                   if all (== SSatisfied) next
+                     then pure Nothing
+                     else pure $ Just (identifier, next)
+           else pure $ Just element
+   nextConstructorStates <- mapMaybeM function constructorStates
+   if null nextConstructorStates
    then pure SSatisfied
    else pure $ SSum nextConstructorStates
 getNextPatternMatchState state pattern' = throwError' $ printf "TYPE ERROR: Problem with next state function %s %s" (show state) (show pattern')

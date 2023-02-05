@@ -3,7 +3,7 @@ module Parser.Types where
 
 import Types
 import Parser.Kinds
-import Parser.Utilities ( ParserT, arrowP, skip, variableGeneric, argAnd)
+import Parser.Utilities ( ParserT, arrowP, skip, variableGeneric, argAnd, Keyword(..))
 import Text.Parsec
 
 typeP :: ParserT st Type
@@ -23,7 +23,7 @@ typeAnonymousRecord = TAnonymousRecord <$> (string "{|" *> skip *> many1 (argAnd
 
 typeForAll :: ParserT st Type
 typeForAll = do
-  _ <- char '(' *> skip *> string "forall" <* skip
+  _ <- char '(' *> skip *> string (show Forall) <* skip
   typeVariableKind <- AbstractionInfo . Name <$> (variableGeneric <* skip <* char '.' <* skip) <*> kindP
   _ <- skip *> char ';' <* skip
   TForall . typeVariableKind <$> (skip *> typeP <* skip <* char ')')
