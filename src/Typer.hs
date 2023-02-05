@@ -15,6 +15,7 @@ import qualified Data.Map as Map
 import Control.Monad
 import SWPrelude()
 import Data.Bifunctor ( Bifunctor(second) )
+import Data.Either
 import Control.Monad.IO.Class
 import Control.Monad.Extra
 import Data.Either.Extra
@@ -24,9 +25,6 @@ import Data.Function
 import Data.List
 import Data.Maybe
 import qualified Data.Set as S
-import Foreign.C (CBool)
-import GHC.Stack (ccsToStrings)
-import Data.IntMap.Merge.Lazy (mapWhenMatched)
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -156,31 +154,34 @@ addFunctionsToEnv env typeName acc (TAbstraction (AbstractionInfo info kind type
   in addFunctionsToEnv env typeName newAcc type'
 addFunctionsToEnv env _ _ _ = env
 
-typeCheckDeclarations :: TyperEnv -> [Declaration] -> (Declaration -> Declaration) -> ResultT TyperEnv
-typeCheckDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declarations found to type check"
-typeCheckDeclarations env@TyperEnv{} list callback = foldM fun env list
-  where fun acc (callback -> (DeclExpr expr)) = typeCheckExpression acc expr >> return acc
-        fun acc@TyperEnv{..} (callback -> (DeclVal name value)) =
-          do type' <- typeCheckExpression acc value
-             return $ acc { variableTypes = Map.insert name type' variableTypes}
-        fun acc@TyperEnv{..} (callback -> (DeclType name t)) = do
-          type' <- findPlaceholderAlias acc t
-          kind <- kindCheckWithEnvironment acc type'
-          let acc2 = addFunctionsToEnv acc name [] type'
-          pure $ acc2 { kindContext = Map.insert (Name name) kind kindContext
-                      , aliasContext = Map.insert name type' aliasContext }
-        fun acc@TyperEnv{..} (callback -> (DeclFun name expectedType expr)) =
-          do type' <- findPlaceholderAlias acc expectedType
-             kind <- kindCheckWithEnvironment acc type'
-             case kind of
-               StarK -> do
-                let newEnv = acc { variableTypes = Map.insert name type' variableTypes}
-                t <- typeCheckExpression newEnv expr      
-                if reduceType t == reduceType type'
-                then return newEnv
+typeCheckDeclarations :: TyperEnv -> [Declaration] -> ResultT TyperEnv
+typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations found to type check"
+typeCheckDeclarations env list = foldM fun env list
+  where fun acc decl = fromRight acc <$> typeCheckDeclaration acc decl
+
+typeCheckDeclaration :: TyperEnv -> Declaration -> ResultT (Either Type TyperEnv)
+typeCheckDeclaration env (DeclExpr expr) = Left <$> typeCheckExpression env expr
+typeCheckDeclaration env@TyperEnv{..} (DeclVal name value) = do 
+          type' <- typeCheckExpression env value
+          pure . Right $ env { variableTypes = Map.insert name type' variableTypes}
+typeCheckDeclaration env@TyperEnv{..} (DeclType name t) = do
+          type' <- findPlaceholderAlias env t
+          kind <- kindCheckWithEnvironment env type'
+          let newEnv = addFunctionsToEnv env name [] type'
+          pure . Right $ newEnv { kindContext = Map.insert (Name name) kind kindContext
+                                , aliasContext = Map.insert name type' aliasContext }
+typeCheckDeclaration env@TyperEnv{..} (DeclFun name expectedType expr) = do            
+          type' <- findPlaceholderAlias env expectedType
+          kind <- kindCheckWithEnvironment env type'
+          case kind of
+            StarK -> do
+              let newEnv = env { variableTypes = Map.insert name type' variableTypes}
+              t <- typeCheckExpression newEnv expr      
+              if reduceType t == reduceType type'
+                then pure $ Right newEnv
                 else throwError' $ printf "DECLARATION ERROR: Annotated type %s is different than obtained type %s" (show type') (show type')
-               other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show type') (show other)
-        fun acc (callback -> (DeclModule name decls)) = typeCheckDeclarations acc decls (renameDeclaration (append name ":"))
+            other -> throwError' $ printf "DECLARATION ERROR: Annotated type %s has kind %s and it should be *" (show type') (show other)
+typeCheckDeclaration _ (DeclModule _ _) = throwError'  "TODO: Can't type checkMatchBody module declaration"            
 
 findPlaceholderAlias :: TyperEnv -> Type -> ResultT Type
 findPlaceholderAlias TyperEnv{..} (TAliasPlaceholder name) =

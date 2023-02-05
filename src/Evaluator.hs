@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE TupleSections #-}
 module Evaluator where
 
 import Types
@@ -13,6 +14,7 @@ import Data.Traversable
 import Control.Monad ( foldM )
 import Data.List
 import Data.Bifunctor ( Bifunctor(second) )
+import Data.Either
 import Data.Maybe
 import Control.Monad
 import Control.Monad.IO.Class
@@ -87,23 +89,21 @@ internalZ = EAbstraction
                       (EVariable "x"))
                     (EVariable "v"))))
 
-evalDeclarations :: EvalEnv -> [Declaration] -> (Declaration -> Declaration) -> ResultT EvalEnv
-evalDeclarations _ [] _ = throwError' "DECLARATION ERROR: No declaration found to evaluate "
-evalDeclarations env list callback = foldM fun env list
-  where fun acc (callback -> (DeclExpr expr)) = evalExpression acc expr >> return acc
-        fun acc (callback -> (DeclVal name value)) =
-          do v <- evalExpression acc value
-             return $ Map.insert name v acc
-        fun acc (callback -> (DeclType name t)) = do
-          -- TODO add cases of a discriminated union to the context as functions         
-          pure $ addFunctionsToEnv2 acc name t
-        fun acc (callback -> (DeclFun name t expr)) = do
+evalDeclarations :: EvalEnv -> [Declaration] -> ResultT EvalEnv
+evalDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations found to evaluate."
+evalDeclarations env list = foldM fun env list
+  where fun acc decl = fromRight acc <$> evalDeclaration acc decl
+
+evalDeclaration :: EvalEnv -> Declaration -> ResultT (Either Value EvalEnv)
+evalDeclaration env (DeclExpr expr) = Left <$> evalExpression env expr
+evalDeclaration env (DeclVal name value) = Right . (flip $ Map.insert name) env <$> evalExpression env value
+evalDeclaration env (DeclType name t) = pure . Right $ addFunctionsToEnv2 env name t
+evalDeclaration env (DeclFun name t expr) = do
           let zCombinator = EAbstraction "f" t Nothing (EApplication internalZ internalZ)
               newExpr = EApplication zCombinator (EAbstraction name t Nothing expr)
-          value <- evalExpression acc newExpr
-          return $ Map.insert name value acc
-        fun acc (callback -> (DeclModule name decls)) = do
-          evalDeclarations acc decls (renameDeclaration (append name ":"))
+          value <- evalExpression env newExpr
+          return . Right $ Map.insert name value env
+evalDeclaration _ (DeclModule _ _) = throwError' "TODO: Can't eval module declaration"
 
 createBinds2 :: Value -> Pattern -> Maybe [(Label, Value)]
 createBinds2 _ PWildcard = Just []
@@ -270,6 +270,3 @@ operatorFunction OpDiv (VLiteral (LRational element)) (VLiteral (LRational acc))
 operatorFunction OpMinus (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element - acc
 operatorFunction OpMinus (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element - acc
 operatorFunction op element acc = error $ printf "Error in fold of %s with element %s and accumulator %s" (show op) (show element) (show acc)
-
-eval :: EvalEnv -> Expression -> ResultT Value
-eval = evalExpression

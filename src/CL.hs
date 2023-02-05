@@ -44,7 +44,7 @@ parseArgs = do
             help "Execute just parsing with the provided file"
           justTypeCheck <- switch $
             short 't' <> long "type-check" <>
-            help "Execute just type check with the provided file"
+            help "Execute just type checking with the provided file"
           justEvaluate <- switch $
             short 'v' <> long "eval" <>
             help "Execute just evaluation from the provided file"

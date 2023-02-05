@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE TupleSections #-}
 module Repl where
 
 import Evaluator
@@ -13,6 +14,7 @@ import Parser
 import Text.Parsec (parse, ParseError)
 import Data.List ( stripPrefix, find )
 import Data.Text (Text, unpack)
+import Control.Monad 
 import Control.Monad.Except ( runExceptT )
 import Control.Monad.State
 import SWPrelude
@@ -21,6 +23,7 @@ import Utils
 import Data.Either.Extra
 import Data.Foldable
 import Data.Maybe
+import Data.Bifunctor ( Bifunctor(first, second) )
 import Control.Monad.Except
 import Options.Applicative.Help (bodyHelp)
 
@@ -48,7 +51,7 @@ instance Options SpecialOption where
   showOptions Kind = (":kind ", ":k ")
   showOptions Quit = (":quit", ":q")
   showOptions Parsed = (":parse ", ":p ")
-  showOptions Env = (":env ", ":e")
+  showOptions Env = (":env", ":e")
   identifyOption str option = (option, msum $ sequence [stripPrefix long, stripPrefix short] str)
     where (long, short) = showOptions option
 
@@ -73,60 +76,43 @@ genericReplSuccess = liftRepl . TIO.putStrLn . buildMessage
 replMessage :: (Show a, Show b) => Either a b -> ReplT ()
 replMessage = liftRepl . printMessage
 
-addDeclaration :: Text -> Either Expression Type -> ReplT ()
-addDeclaration name body = do
-  (TyperEnv typerEnv x y, evalEnv) <- get
-  case body of
-    Left expr -> do
-      typedValue <- typeCheckEval expr
-      case typedValue of
-        Left e -> genericReplError e
-        Right (t,v) -> do
-         let newTyperEnv = Map.insert name t typerEnv
-         put (TyperEnv newTyperEnv x y, Map.insert name v evalEnv)
-    Right t -> do
-      type' <- liftRepl . runExceptT $ findPlaceholderAlias (TyperEnv typerEnv x y) t
-      case type' of
-        Left e -> genericReplError e
-        Right t' -> do
-          kind <- liftRepl . runExceptT $ kindCheckWithEnvironment (TyperEnv typerEnv x y) t'
-          case kind of
-            Left e -> genericReplError e
-            Right k -> do
-              let x' = Map.insert (Name name) k x
-                  y' = Map.insert name t' y
-                  acc2 = addFunctionsToEnv (TyperEnv typerEnv x' y') name [] t'
-              put (acc2, evalEnv)
-
-typeCheckEval :: Expression -> ReplT (Result (Type, Value))
-typeCheckEval expr = do
-   (typerEnv, evalEnv) <- get
-   type' <- liftIO $ runExceptT $ typeCheckExpression typerEnv expr
+typeCheck :: TyperEnv -> Declaration -> ReplT (Maybe Type)
+typeCheck env decl = do
+   type' <- liftIO $ runExceptT $ typeCheckDeclaration env decl
    case type' of
-     Left errorType -> return (Left $ addErrorColor (errorType :: Text))
-     Right t -> do
-       result <- liftIO $ runExceptT $ evalExpression evalEnv expr
-       case result of
-         Left e -> return (Left $ addErrorColor (e :: Text))
-         Right v -> return (Right (t, v))
+     Left errorType -> replError errorType >> pure Nothing
+     Right typeEnv ->
+       case typeEnv of
+         Left t -> pure $ Just t
+         Right newTyperEnv -> modify (first (const newTyperEnv)) >> pure Nothing
+
+eval :: EvalEnv -> Declaration -> ReplT (Maybe Value)
+eval env decl = do
+   value <- liftIO $ runExceptT $ evalDeclaration env decl
+   case value of
+     Left errorValue -> replError errorValue >> pure Nothing
+     Right valueEnv ->
+       case valueEnv of
+         Left v -> pure $ Just v
+         Right newEvalEnv -> modify (second (const newEvalEnv)) >> pure Nothing
+
+typeCheckEval :: Declaration -> ReplT (Maybe (Type, Value))
+typeCheckEval decl = do
+   (typerEnv, evalEnv) <- get
+   type' <- typeCheck typerEnv decl
+   case type' of
+     Nothing -> Nothing <$ eval evalEnv decl
+     Just t -> fmap (t,) <$> eval evalEnv decl
 
 singleExecution :: String -> ReplT ()
 singleExecution content = do
   case parse declarationP "" content of
     Left errorParse -> genericReplError (errorParse :: ParseError)
     Right decl -> do
-        case decl of
-          DeclExpr expr -> do
-            (typerEnv, evalEnv) <- get        
-            do type' <- liftRepl . runExceptT $ typeCheckExpression typerEnv expr
-               case type' of
-                 Left errorType -> replError errorType
-                 Right _ -> do
-                   result <- liftRepl . runExceptT $ evalExpression evalEnv expr
-                   replMessage result
-          DeclFun name _ body -> addDeclaration name (Left body)
-          DeclVal name body -> addDeclaration name (Left body)
-          DeclType name type' -> addDeclaration name (Right type')
+        result <- typeCheckEval decl
+        case result of
+          Nothing -> pure ()
+          Just (_, v) -> genericReplSuccess v
 
 getEnv :: ReplT ()
 getEnv = do
@@ -158,13 +144,7 @@ importFile path = do
   content <- liftRepl $ readFile path
   case parse fileP "" content of
     Left errorParse -> error $ show errorParse
-    Right decls -> do
-     for_ decls
-        (\case
-          DeclExpr _ -> return ()
-          DeclVal name body -> addDeclaration name (Left body)
-          DeclType name type' -> addDeclaration name (Right type')
-          DeclFun name _ body -> addDeclaration name (Left body))
+    Right decls -> for_ decls typeCheckEval
 
 getParsed :: String -> ReplT ()
 getParsed content = replMessage $ parse declarationP "" content

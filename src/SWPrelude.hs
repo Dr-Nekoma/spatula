@@ -143,7 +143,7 @@ foldAux fun' element acc = do
   getFunctionalValue next element
 
 getFunctionalValue :: Value -> Value -> ResultT Value
-getFunctionalValue (VClosure label body env) = \element -> eval (Map.insert label element env) body
+getFunctionalValue (VClosure label body env) = \element -> evalExpression (Map.insert label element env) body
 getFunctionalValue (VNativeFunction (NativeFunction fun)) = fun
 getFunctionalValue _ = error "Should not happen"
     
