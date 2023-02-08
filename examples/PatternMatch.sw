@@ -18,7 +18,7 @@
 
 [defun print-tuple2 [(tuple Tuple)] : Unit
   [match tuple
-    [[!Left [!B] [:or [!C] [!D]]] [print !String "This is the first branch 2"]]
+    [[!Left [_] [:or [!C] [!D]]] [print !String "This is the first branch 2"]]
     [[!Left [!A] [:or [!E] [!C]]] [print !String "This is the first branch 3"]]
     [[_] [print !String "Third branch"]]]]    
 

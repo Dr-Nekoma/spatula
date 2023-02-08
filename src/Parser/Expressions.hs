@@ -32,7 +32,7 @@ expressionsP :: ParserT st [Expression]
 expressionsP = many (skip *> expressionP <* skip) <* eof
   
 expressionP :: ParserT st Expression
-expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, recordProjectionP, recordUpdateP, exprApplication, patternMatchingP]
+expressionP = choice $ fmap try [exprLiteral, exprVariable, exprCondition,  exprAbstraction, letP, operatorP, literalListP, prognP, anonymousRecordP, nominalRecordP, recordProjectionP, recordUpdateP, exprApplication, patternMatchingP]
 
 exprCondition :: ParserT st Expression
 exprCondition = ECondition <$> (openDelimiter *> string (show If) *> expr) <*> expr <*> expr <* closeDelimiter
@@ -51,7 +51,17 @@ foldArgs args returnType body =
   in Prelude.foldr fun first (Prelude.init args)
 
 anonymousRecordP :: ParserT st Expression
-anonymousRecordP = EAnonymousRecord <$> (string (show RecordLeftDelimiter) *> skip *> many1 (argAnd expressionP) <* skip <* string (show RecordRightDelimiter))
+anonymousRecordP = EAnonymousRecord <$> (string (show AnonymousRecordLeftDelimiter) *> skip *> many1 (argAnd expressionP) <* skip <* string (show AnonymousRecordRightDelimiter))
+
+-- [abc {|(y 123) (x "Yay") |}]
+
+-- { Person |(name = "Something") (age = [+ 1 2])| }
+
+nominalRecordP :: ParserT st Expression
+nominalRecordP = do
+  name <- string (show NominalRecordLeftDelimiter) *> skip *> typeP <* skip <* char '|'
+  fields <- many1 (argAnd expressionP) <* skip <* string (show AnonymousRecordRightDelimiter)
+  pure $ ENominalRecord name fields
   
 exprAbstraction :: ParserT st Expression
 exprAbstraction = do

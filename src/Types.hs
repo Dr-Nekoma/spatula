@@ -61,6 +61,7 @@ typeSubstitution placeHolder type' target =
     TString -> TString
     TList (TListInfo listType) -> TList . TListInfo $ fmap (typeSubstitution placeHolder type') listType
     TAnonymousRecord fields -> TAnonymousRecord $ fmap (second $ typeSubstitution placeHolder type') fields
+    TNominalRecord name fields -> TNominalRecord name $ fmap (second $ typeSubstitution placeHolder type') fields
     TAlias name type'' -> TAlias name $ typeSubstitution placeHolder type'' type'
     TAliasPlaceholder name -> TAliasPlaceholder name
     TAlgebraic fields -> TAlgebraic $ fmap (second (fmap (typeSubstitution placeHolder type'))) fields
@@ -151,6 +152,7 @@ data Type
     | TString
     | TList TListInfo
     | TAnonymousRecord [(Text, Type)]
+    | TNominalRecord Text [(Text, Type)]
     | TArrow Type Type
     | TVariable TVariableInfo
     | TForall AbstractionInfo
@@ -182,6 +184,10 @@ instance Show Type where
   show (TAliasPlaceholder name) = unpack name
   show (TAnonymousRecord []) = printf "| Anonymous Record | EMPTY"
   show (TAnonymousRecord list) = go "| Anonymous Record | " list
+    where go acc [] = acc ++ "\n"
+          go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ " ") xs
+  show (TNominalRecord name []) = unpack name
+  show (TNominalRecord name list) = go ("| " ++ unpack name ++ " |") list
     where go acc [] = acc ++ "\n"
           go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ " ") xs
   show (TAlgebraic []) = "Empty ADT"
@@ -292,7 +298,8 @@ data Expression
     | ETypeAbstraction TVariableInfo Kind (Maybe Type) Expression
     | ETypeApplication Expression Type
     | EList [Expression]
-    | EAnonymousRecord [Field]
+    | EAnonymousRecord [Field] -- TODO: We should remove lists from records, and just use a Map instead
+    | ENominalRecord Type [Field]
     | EProgn [Expression]
     | ERecordProjection Expression Label
     | ERecordUpdate Expression [(Label, Expression)]

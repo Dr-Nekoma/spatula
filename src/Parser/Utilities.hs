@@ -48,8 +48,10 @@ data Delimiter =
   | LeftBraces
   | RightBraces
   | ListDelimiter
-  | RecordLeftDelimiter
-  | RecordRightDelimiter  
+  | AnonymousRecordLeftDelimiter
+  | AnonymousRecordRightDelimiter  
+  | NominalRecordLeftDelimiter
+  | NominalRecordRightDelimiter  
   | BeginCommentBlock
   | CloseCommentBlock
   | LineComment
@@ -64,8 +66,10 @@ instance Show Delimiter where
   show LeftBraces = "{"   
   show RightBraces = "}"
   show ListDelimiter = "'"
-  show RecordLeftDelimiter = "{|"
-  show RecordRightDelimiter = "|}"  
+  show AnonymousRecordLeftDelimiter = "{|"
+  show AnonymousRecordRightDelimiter = "|}"  
+  show NominalRecordLeftDelimiter = "{"
+  show NominalRecordRightDelimiter = "}"  
   show BeginCommentBlock = "{;"
   show CloseCommentBlock = ";}"
   show LineComment = "//"

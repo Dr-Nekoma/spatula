@@ -159,18 +159,27 @@ typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations fou
 typeCheckDeclarations env list = foldM fun env list
   where fun acc decl = fromRight acc <$> typeCheckDeclaration acc decl
 
+checkExistence :: Text -> TyperEnv -> ResultT ()
+checkExistence name TyperEnv{..} = do
+  if Map.member name aliasContext
+    then throwError' $ printf "DECLARATION ERROR: Label %s already found in alias context." (unpack name)
+  else pure ()
+
 typeCheckDeclaration :: TyperEnv -> Declaration -> ResultT (Either Type TyperEnv)
 typeCheckDeclaration env (DeclExpr expr) = Left <$> typeCheckExpression env expr
 typeCheckDeclaration env@TyperEnv{..} (DeclVal name value) = do 
+          checkExistence name env
           type' <- typeCheckExpression env value
           pure . Right $ env { variableTypes = Map.insert name type' variableTypes}
 typeCheckDeclaration env@TyperEnv{..} (DeclType name t) = do
+          checkExistence name env
           type' <- findPlaceholderAlias env t
           kind <- kindCheckWithEnvironment env type'
           let newEnv = addFunctionsToEnv env name [] type'
           pure . Right $ newEnv { kindContext = Map.insert (Name name) kind kindContext
                                 , aliasContext = Map.insert name type' aliasContext }
 typeCheckDeclaration env@TyperEnv{..} (DeclFun name expectedType expr) = do            
+          checkExistence name env
           type' <- findPlaceholderAlias env expectedType
           kind <- kindCheckWithEnvironment env type'
           case kind of
@@ -204,6 +213,10 @@ findPlaceholderAlias env@TyperEnv{..} (TAbstraction (AbstractionInfo i k t)) = d
   let newEnv = env { aliasContext = Map.insert (extractName i) (TVariable i) aliasContext }
   t' <- findPlaceholderAlias newEnv t
   pure . TAbstraction $ AbstractionInfo i k t'
+findPlaceholderAlias env (TNominalRecord name typedNames) = do
+  let (names, types) = unzip typedNames
+  ts <- for types (findPlaceholderAlias env)
+  pure . TNominalRecord name $ zip names ts
 findPlaceholderAlias env (TAnonymousRecord typedNames) = do
   let (names, types) = unzip typedNames
   ts <- for types (findPlaceholderAlias env)
@@ -233,6 +246,22 @@ typeCheckExpression env (EList list) = do
     (x:_) -> throwError' $ printf "TYPE ERROR: Type mismatch on list. Are all the elements '%s'?" (show x)
 
 typeCheckExpression _ (EAlgebraic _ _) = throwError' "We tried to type check an EAlgebraic"
+
+typeCheckExpression env@TyperEnv{..} (ENominalRecord t fields) = do
+  type' <- findPlaceholderAlias env t
+  void $ kindCheckWithEnvironment env type'
+  case reduceType type' of
+    record@(TNominalRecord _ savedFields) -> do 
+      test <- typeCheckExpression env (EAnonymousRecord fields)
+      case test of
+        TAnonymousRecord fields -> do
+          let reducedSavedFields = sortOn fst $ map (second reduceType) savedFields
+              reducedFields = map (second reduceType) fields
+          if reducedSavedFields == reducedFields
+            then pure type'
+            else throwError' $ printf "TYPE ERROR: Type mismatch between record declaration and instance %s" (show record)
+        other -> throwError' "TYPE ERROR: There is something wrong with your fileds bud"
+    other -> throwError' $ printf "TYPE ERROR: Expected record type but got %s" (show other)
 
 typeCheckExpression env@TyperEnv{..} (EPatternMatching toMatch list) = do
   type' <- reduceType <$> typeCheckExpression env toMatch
@@ -267,6 +296,11 @@ typeCheckExpression env (ERecordProjection expr label) = do
       case find (fun label) fields of
         Nothing ->  throwError' $ printf "TYPE ERROR: Record projection %s could not be found in %s" (unpack label) (show potentialRecord)
         Just (_, type') -> pure type'
+    TNominalRecord _ fields -> do
+      let fun target (name, _) = name == target
+      case find (fun label) fields of
+        Nothing ->  throwError' $ printf "TYPE ERROR: Record projection %s could not be found in %s" (unpack label) (show potentialRecord)
+        Just (_, type') -> pure type'
     other -> throwError' $ printf "TYPE ERROR: Record projection can only be used on records and got %s" (show other)
 
 typeCheckExpression env (ERecordUpdate expr toUpdateList) = do
@@ -278,12 +312,18 @@ typeCheckExpression env (ERecordUpdate expr toUpdateList) = do
       if toUpdateTypes `S.isSubsetOf` setFields
       then pure $ TAnonymousRecord fields
       else throwError' $ printf "TYPE ERROR: Didn't find fields %s in record update" (show $ S.difference toUpdateTypes setFields)
+    TNominalRecord recordName fields -> do
+      toUpdateTypes <- S.fromList <$> for toUpdateList (mapM (fmap reduceType . typeCheckExpression env))
+      let setFields = S.fromList fields
+      if toUpdateTypes `S.isSubsetOf` setFields
+      then pure $ TNominalRecord recordName fields
+      else throwError' $ printf "TYPE ERROR: Didn't find fields %s in record update" (show $ S.difference toUpdateTypes setFields)
     other -> throwError' $ printf "TYPE ERROR: Record update can only be used on records and got %s" (show other)
 
 typeCheckExpression env (EAnonymousRecord fields) = do
   let (labels, exprs) = unzip fields
   types <- for exprs (typeCheckExpression env)
-  pure $ TAnonymousRecord (sortBy (\(label1, _) (label2, _) -> compare label1 label2) (zip labels types))
+  pure $ TAnonymousRecord (sortOn fst (zip labels types))
   
 typeCheckExpression _ (ELiteral literal) =
   case literal of
@@ -435,6 +475,11 @@ kindCheckWithEnvironment env@TyperEnv{..} type' =
     TAlias name _ -> 
       let kind = Map.lookup (Name name) kindContext in
       maybe (throwError' $ printf "KIND ERROR: Unbound type alias %s in the environment." (show name)) return kind
+    TNominalRecord _ fields -> do
+      internalKinds <- for (map snd fields) (kindCheckWithEnvironment env)
+      if all (==StarK) internalKinds
+      then pure StarK
+      else throwError' "KIND ERROR: Internal types of fields should have kind *."
     TAnonymousRecord fields -> do
       internalKinds <- for (map snd fields) (kindCheckWithEnvironment env)
       if all (==StarK) internalKinds
@@ -491,8 +536,10 @@ reduceType type' =
     TString -> TString
     TAliasPlaceholder _ -> error "This should never happen. Something is broken in reduction xD"
     TAlias _ type'' -> reduceType type''
+    TNominalRecord name fields ->
+      TNominalRecord name $ map (second reduceType) $ sortOn fst fields
     TAnonymousRecord fields ->
-      TAnonymousRecord $ map (second reduceType) fields
+      TAnonymousRecord $ map (second reduceType) $ sortOn fst fields
     TAlgebraic namedTypes ->
       let (names, types) = unzip namedTypes
           reducedTypes = map (map reduceType) types

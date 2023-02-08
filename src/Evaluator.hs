@@ -139,16 +139,20 @@ evalExpression env (EPatternMatching toMatch list) = do
       folder expr _ = pure expr
   expr <- foldM folder Nothing list
   maybe (throwError' $ printf "ERROR: Could not evaluate %s in pattern match" (show toMatch)) pure expr
-  
+
 evalExpression env (EAlgebraic label exprs) = do
   values <- for exprs (evalExpression env)
   pure $ VAlgebraic label values
 
--- TODO: add a sortBy so we can have record value equality
+evalExpression env (ENominalRecord _ fields) = do
+  let (names, exprs) = unzip fields
+  values <- for exprs (evalExpression env)
+  pure . VRecord $ sortOn fst $ zip names values
+
 evalExpression env (EAnonymousRecord fields) = do
   let (names, exprs) = unzip fields
   values <- for exprs (evalExpression env)
-  pure . VRecord $ zip names values
+  pure . VRecord $ sortOn fst $ zip names values
 
 evalExpression env (EList list) = do
   evaluatedElems <- for list (evalExpression env)
@@ -174,7 +178,7 @@ evalExpression env (ERecordUpdate expr toUpdateList) = do
     VRecord fields -> do
       toUpdateValues <- Map.fromList <$> for toUpdateList (mapM (evalExpression env))
       let mapFields = Map.fromList fields
-      pure $ VRecord . Map.toList $ toUpdateValues `Map.union` mapFields
+      pure . VRecord $ Map.toList $ toUpdateValues `Map.union` mapFields
     other -> throwError' $ printf "TYPE ERROR: Record update can only be used on records and got %s" (show other)
 
 evalExpression _ (ELiteral literal) = pure $ VLiteral literal

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 module Parser.Declarations where
 
 import Data.Text ( Text )
@@ -14,7 +15,7 @@ fileP :: ParserT st [Declaration]
 fileP = manyTill (skip *> declarationP <* skip) eof
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [defaliasP, defadtP, defvalP, defunP, defmoduleP, DeclExpr <$> expressionP]
+declarationP = choice $ fmap try [defaliasP, defadtP, defrecordP, defvalP, defunP, defmoduleP, DeclExpr <$> expressionP]
 
 defvalP :: ParserT st Declaration
 defvalP = do
@@ -39,9 +40,9 @@ defadtP = do
   openDelimiter *> skip *> string "defalgebraic" <* skip
   name <- variableGeneric <* skip
   namedKinds <- skip *> optionMaybe (openDelimiter *> many (argAnd kindP) <* closeDelimiter) <* skip
-  let nullaryP = (\name -> (name, [])) <$> (skip *> variableGeneric <* skip)
+  let nullaryP = (, []) <$> (skip *> variableGeneric <* skip)
       tagP = (,) <$> (skip *> char '(' *> variableGeneric) <*> (skip *> many1 (typeP <* skip)) <* char ')' <* skip
-  types <- many1 (skip *> (choice $ fmap try [nullaryP, tagP]) <* skip) <* closeDelimiter <* skip
+  types <- many1 (skip *> (choice $ fmap try [nullaryP, tagP])) <* skip <* closeDelimiter <* skip
   let algebraic = TAlgebraic types
       t = maybe algebraic (Prelude.foldr fun algebraic) namedKinds
       fun (n, kind) acc = TAbstraction (AbstractionInfo (Name n) kind acc)
@@ -56,6 +57,18 @@ defaliasP = do
   let t = maybe type' (Prelude.foldr fun type') namedKinds
       fun (n, kind) acc = TAbstraction (AbstractionInfo (Name n) kind acc)
   pure $ DeclType name t
+
+defrecordP :: ParserT st Declaration
+defrecordP = do
+  openDelimiter *> skip *> string "defrecord" <* skip
+  name <- variableGeneric <* skip
+  namedKinds <- skip *> optionMaybe (openDelimiter *> many (argAnd kindP) <* closeDelimiter) <* skip
+  let fieldP = (,) <$> (skip *> char '(' *> variableGeneric) <*> (skip *> typeP <* skip <* char ')' <* skip)
+  fields <- many1 (skip *> fieldP) <* skip <* closeDelimiter <* skip
+  let initial = TNominalRecord name fields
+      type' = maybe initial (Prelude.foldr fun initial) namedKinds
+      fun (n, kind) acc = TAbstraction (AbstractionInfo (Name n) kind acc)
+  pure $ DeclType name type'
 
 curriedArrow :: Curryable a => [a] -> a -> a
 curriedArrow types returnType = Prelude.foldr kurry returnType types 

@@ -4,15 +4,19 @@
 ** DONE Silverware 90% backwards compatibility
 ** DONE Let bindings
 ** DONE Type Operators
-** TODO Algebraic Data Types
+** DONE Algebraic Data Types
 ** DONE CI
-** DONE Pattern Matching
 ** DONE Disjunctive pattern matching
 ** DONE Guards
+** TODO LSP
 ** TODO Prelude library with immutable data structures and builtins
-** TODO Recursive Types
+
+* Phase 1.5
+** TODO Pattern Matching
+** TODO Modules
 
 * Phase 2 (1 y.) | XX/XX/XXXX - XX/XX/XXXX
+** TODO Recursive Types
 ** TODO Compilable
 ** TODO Simple Modules
 ** TODO Type Inference
