@@ -3,6 +3,7 @@
 module Parser.Declarations where
 
 import Data.Text ( Text )
+import Control.Monad
 import Types
 import Parser.Kinds
 import Parser.Types
@@ -15,29 +16,18 @@ fileP :: ParserT st [Declaration]
 fileP = manyTill (skip *> declarationP <* skip) eof
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [defaliasP, defadtP, defrecordP, defvalP, defunP, defmoduleP, DeclExpr <$> expressionP]
+declarationP = choice $ fmap try [defload, defaliasP, defadtP, defrecordP, defvalP, defunP, defmoduleP, DeclExpr <$> expressionP]
 
 defvalP :: ParserT st Declaration
 defvalP = do
-  openDelimiter *> skip *> string "define" <* skip
+  void $ openDelimiter *> skip *> string "define" <* skip
   name <- variableGeneric <* skip
   value <- expressionP <* skip <* closeDelimiter <* skip
   pure $ DeclVal name value
 
--- [defalias Name String]
-
---[defAlias Combine [(a Star)] |List a|]
-
-
- 
--- [defalgebraic Axis[(T Star) (U Star)]
---     (X Integer) 
---     Y
---     Z]
-
 defadtP :: ParserT st Declaration
 defadtP = do
-  openDelimiter *> skip *> string "defalgebraic" <* skip
+  void $ openDelimiter *> skip *> string "defalgebraic" <* skip
   name <- variableGeneric <* skip
   namedKinds <- skip *> optionMaybe (openDelimiter *> many (argAnd kindP) <* closeDelimiter) <* skip
   let nullaryP = (, []) <$> (skip *> variableGeneric <* skip)
@@ -48,9 +38,14 @@ defadtP = do
       fun (n, kind) acc = TAbstraction (AbstractionInfo (Name n) kind acc)
   pure $ DeclType name t
 
+defload :: ParserT st Declaration
+defload = do
+  void $ openDelimiter *> skip *> string "load" <* skip
+  DeclLoad <$> (simpleString <* skip <* closeDelimiter)
+
 defaliasP :: ParserT st Declaration
 defaliasP = do
-  openDelimiter *> skip *> string "defalias" <* skip
+  void $ openDelimiter *> skip *> string "defalias" <* skip
   name <- variableGeneric <* skip
   namedKinds <- skip *> optionMaybe (openDelimiter *> many1 (argAnd kindP) <* closeDelimiter) <* skip
   type' <- typeP <* skip <* closeDelimiter <* skip
@@ -60,7 +55,7 @@ defaliasP = do
 
 defrecordP :: ParserT st Declaration
 defrecordP = do
-  openDelimiter *> skip *> string "defrecord" <* skip
+  void $ openDelimiter *> skip *> string "defrecord" <* skip
   name <- variableGeneric <* skip
   namedKinds <- skip *> optionMaybe (openDelimiter *> many (argAnd kindP) <* closeDelimiter) <* skip
   let fieldP = (,) <$> (skip *> char '(' *> variableGeneric) <*> (skip *> typeP <* skip <* char ')' <* skip)
@@ -84,7 +79,7 @@ getFunType args returnType =
 
 defunP :: ParserT st Declaration
 defunP = do
-  _ <- openDelimiter *> skip *> string "defun" <* skip
+  void $  openDelimiter *> skip *> string "defun" <* skip
   name <- variableGeneric <* skip
   args <- arguments
   (returnType, body) <- (,) <$> (skip *> char ':' *> skip *> typeP <* skip) <*> many1 (expressionP <* skip) <* closeDelimiter <* skip
@@ -92,7 +87,7 @@ defunP = do
 
 defmoduleP :: ParserT st Declaration
 defmoduleP = do
-  _ <- openDelimiter *> skip *> string "defmodule" <* skip
+  void $ openDelimiter *> skip *> string "defmodule" <* skip
   name <- variableGeneric <* skip
   decls <- many (skip *> declarationP <* skip) <* closeDelimiter
   pure $ DeclModule name decls

@@ -18,8 +18,10 @@ import Data.Either
 import Data.Maybe
 import Control.Monad
 import Control.Monad.IO.Class
+import Parser
 import System.IO.Unsafe
 import Data.List.Extra (firstJust)
+import Text.Parsec (parse)
 
 type EvalEnv = Map.Map Text Value
 
@@ -89,6 +91,13 @@ internalZ = EAbstraction
                       (EVariable "x"))
                     (EVariable "v"))))
 
+loadFile2 :: EvalEnv -> FilePath -> ResultT (Either Value EvalEnv)
+loadFile2 env filepath = do
+  content <- liftIO $ readFile filepath
+  case parse fileP "" content of
+    Left errorParse -> throwError' $ printf "DECLARATION ERROR: Could not load file %s. Error % was found" (filepath) (show errorParse)
+    Right decls -> Right <$> foldM (\acc decl -> fromRight acc <$> evalDeclaration acc decl) env decls
+
 evalDeclarations :: EvalEnv -> [Declaration] -> ResultT EvalEnv
 evalDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations found to evaluate."
 evalDeclarations env list = foldM fun env list
@@ -97,6 +106,7 @@ evalDeclarations env list = foldM fun env list
 evalDeclaration :: EvalEnv -> Declaration -> ResultT (Either Value EvalEnv)
 evalDeclaration env (DeclExpr expr) = Left <$> evalExpression env expr
 evalDeclaration env (DeclVal name value) = Right . (flip $ Map.insert name) env <$> evalExpression env value
+evalDeclaration env (DeclLoad filepath) = loadFile2 env filepath
 evalDeclaration env (DeclType name t) = pure . Right $ addFunctionsToEnv2 env name t
 evalDeclaration env (DeclFun name t expr) = do
           let zCombinator = EAbstraction "f" t Nothing (EApplication internalZ internalZ)

@@ -253,6 +253,7 @@ data Declaration
     | DeclVal Text Expression
     | DeclType Text Type
     | DeclModule Text [Declaration]
+    | DeclLoad FilePath
     deriving (Generic, Eq)
 
 renameDeclaration :: Text -> Declaration -> Declaration
@@ -271,7 +272,7 @@ instance Show Declaration where
   show (DeclVal name literal) = "Value: " ++ unpack name ++ " = " ++ show literal
   show (DeclType name type') = "Type: " ++ unpack name ++ " = " ++ show type'
   show (DeclModule name decls) = "Module : " ++ unpack name ++ "[ " ++ concatMap show decls ++ " ]"
-
+  show (DeclLoad filepath) = "Loading file: " ++ filepath
 type Label = Text
 type Field = (Label, Expression)
 

@@ -10,6 +10,7 @@ import Data.List ( find, sortBy )
 import Data.Text (pack, Text, unpack, append)
 import Text.Printf ( printf )
 import Utils ( ResultT, throwError', printWarning )
+import Parser
 import Data.Traversable
 import qualified Data.Map as Map
 import Control.Monad
@@ -25,6 +26,7 @@ import Data.Function
 import Data.List
 import Data.Maybe
 import qualified Data.Set as S
+import Text.Parsec (parse)
 
 data TyperEnv = TyperEnv
   { variableTypes :: Map.Map Text Type
@@ -165,8 +167,16 @@ checkExistence name TyperEnv{..} = do
     then throwError' $ printf "DECLARATION ERROR: Label %s already found in alias context." (unpack name)
   else pure ()
 
+loadFile :: TyperEnv -> FilePath -> ResultT (Either Type TyperEnv)
+loadFile env filepath = do
+  content <- liftIO $ readFile filepath
+  case parse fileP "" content of
+    Left errorParse -> throwError' $ printf "DECLARATION ERROR: Could not load file %s. Error % was found" (filepath) (show errorParse)
+    Right decls -> Right <$> foldM (\acc decl -> fromRight acc <$> typeCheckDeclaration acc decl) env decls
+
 typeCheckDeclaration :: TyperEnv -> Declaration -> ResultT (Either Type TyperEnv)
 typeCheckDeclaration env (DeclExpr expr) = Left <$> typeCheckExpression env expr
+typeCheckDeclaration env (DeclLoad filepath) = loadFile env filepath
 typeCheckDeclaration env@TyperEnv{..} (DeclVal name value) = do 
           checkExistence name env
           type' <- typeCheckExpression env value

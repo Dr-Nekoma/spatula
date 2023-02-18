@@ -141,10 +141,7 @@ unit :: ParserT st Literal
 unit = LUnit <$ string (show Unit)
 
 stringP :: ParserT st Literal
-stringP = do
-  char '"'
-  str <- manyTill anyChar (try $ char '"')
-  return $ LString (pack str)
+stringP = LString . pack <$> simpleString
 
 rational :: ParserT st Literal
 rational = do

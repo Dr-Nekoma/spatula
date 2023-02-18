@@ -15,6 +15,7 @@ module Parser.Utilities
   , curriedArrow
   , skip
   , argAnd
+  , simpleString
   )
 where
  
@@ -167,3 +168,8 @@ arrowP p =
   let arrow = string "->" *> skip
       returnType = skip *> p
   in between (char '(' *> skip) (skip *> char ')') (curriedArrow <$> (arrow *> listArrowP p) <*> returnType)
+
+simpleString :: ParserT st String
+simpleString = do
+  void $ char '"'
+  manyTill anyChar (try $ char '"')
