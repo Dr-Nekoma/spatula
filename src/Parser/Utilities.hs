@@ -92,6 +92,7 @@ data Keyword =
   | Guard
   | NamedPattern1
   | NamedPattern2
+  | Wildcard
   deriving (Enum, Bounded)
 
 instance Show Keyword where
@@ -100,7 +101,7 @@ instance Show Keyword where
   show Forall = "forall"
   show Star = "Star"
   show LetIn = "let-in"
-  show LetPlus = "let+"
+  show LetPlus = "let-plus"
   show Progn = "progn"
   show RecordGet = "getr"
   show RecordSet = "setr"
@@ -110,6 +111,7 @@ instance Show Keyword where
   show Guard = ":when"
   show NamedPattern1 = ":with"
   show NamedPattern2 = ":as"
+  show Wildcard = "_"
 
 delimiters :: [String]
 delimiters = map show ([minBound .. maxBound] :: [Delimiter])
@@ -152,7 +154,7 @@ variableGeneric = do
   else return (pack str)
 
 argAnd :: ParserT st a -> ParserT st (Text, a)
-argAnd a = (,) <$> (char '(' *> skip *> variableGeneric <* skip) <*> (a <* skip <* char ')' <* skip)
+argAnd a = (,) <$> (char '(' *> skip *> choice (fmap try [variableGeneric, pack <$> string "_"]) <* skip) <*> (a <* skip <* char ')' <* skip)
 
 curriedArrow :: Curryable a => [a] -> a -> a
 curriedArrow types returnType = Prelude.foldr kurry returnType types  

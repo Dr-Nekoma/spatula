@@ -39,8 +39,9 @@ exprCondition = ECondition <$> (openDelimiter *> string (show If) *> expr) <*> e
   where expr = skip *> expressionP <* skip
 
 arguments :: ParserT st [Either (TVariableInfo, Kind) (Text, Type)]
-arguments = openDelimiter *> many (choice $ fmap try [fmap (\(a,b) -> Left (Name a, b)) (argAnd kindP), fmap Right (argAnd typeP)]) <* closeDelimiter
-
+arguments = openDelimiter *> many (choice $ fmap try [fmap (\(a,b) -> Left (Name a, b)) (argAnd kindP), unitCase, fmap Right (argAnd typeP)]) <* closeDelimiter
+  where unitCase = Right (pack "_", TUnit) <$ (string "(" *> skip *> string ")" <* skip)
+  
 foldArgs :: [Either (TVariableInfo, Kind) (Text, Type)] -> Maybe Type -> [Expression] -> Expression
 foldArgs args returnType body =
   let fun (Left item) = ($ Nothing) . uncurry ETypeAbstraction $ item

@@ -1,3 +1,9 @@
-[defun add [(a Integer) (b Integer)] : Integer [+ a b]]
+[defalgebraic Either[(T Star) (U Star)]
+  (Left T)
+  (Right U)]
 
-[defun add2 [(a Integer)] : Integer [add a 2]]
+[defalias Result [(T Star)] |Either String T|]
+
+[defalgebraic Thing[(T Star)]
+  Nothing
+  (Something T)]

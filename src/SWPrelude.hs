@@ -25,6 +25,8 @@ evaluatorPrelude = Map.fromList $
                        ("fold", fold' id),
                        ("fold-back", fold' reverse),
                        ("read-lines", readLines),
+                       ("is-list-empty", isEmpty),
+                       ("string-to-integer", stringToInteger),
                        ("read-file", readFile')] ++ [("T", boolean True), ("F", boolean False)]
   
 typerPrelude :: Map.Map Text Type
@@ -38,6 +40,8 @@ typerPrelude = Map.fromList list
                   ("fold-back", foldType),
                   ("read-lines", readLinesType),
                   ("read-file", readFileType),
+                  ("is-list-empty", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) TBool)),
+                  ("string-to-integer", TArrow TString TInteger),
                   ("T", TBool),
                   ("F", TBool)]
 
@@ -81,6 +85,15 @@ foldType =
 
 boolean :: Bool -> Value
 boolean = VLiteral . LBool
+
+stringToInteger :: Value -> ResultT Value
+stringToInteger (VLiteral (LString str)) = pure . VLiteral . LInteger . read $ unpack str
+stringToInteger _ = fail "Function 'stringToInteger' can only be used on strings"
+
+isEmpty :: Value -> ResultT Value
+isEmpty (VList []) = pure $ boolean False
+isEmpty (VList _) = pure $ boolean True
+isEmpty _ = fail "Function 'isEmpty' can only be applied to lists"
 
 car :: Value -> ResultT Value
 car (VList []) = fail "Can't apply 'car' function in empty lists"

@@ -41,7 +41,7 @@
 (eval-and-compile
   (defconst silverware-keywords
     '("if" "match" "defun" "do" "open" "defalgebraic" "defmacro" "lambda" "and" "or"
-      "Unit" "Integer" "Rational" "String" "Bool" "let-in" "let+" "forall"
+      "Unit" "Integer" "Rational" "String" "Bool" "let-in" "let-plus" "forall"
       "+" "-" "*" "/" "=" "print" "define" "defalias"
       "defrecord" "begin" "call" "->" "rec" "list" "quote" "#" "@" "!")))
 
@@ -51,9 +51,9 @@
 (defun silverware-mode-variables ()
   "Setup variables for Silverware mode."
   (setq-local comment-start-skip
-	      "\\(\\(^\\|[^\\\n]\\)\\(\\\\\\\\\\)*\\)\\(;+\\|#|\\) *")
-  (setq-local comment-end-skip "[ \t]*\\(\\s>\\||#\\)")
-  (setq-local font-lock-comment-end-skip "|#")
+	      "\\(\\(^\\|[^\\\n]\\)\\(\\\\\\\\\\)*\\)\\({;+\\|;}\\) *")
+  (setq-local comment-end-skip "[ \t]*\\(\\s>\\|{;\\)")
+  (setq-local font-lock-comment-end-skip ";}")
   (setq-local indent-line-function #'lisp-indent-line)
   (setq-local fill-paragraph-function 'lisp-fill-paragraph))
 
