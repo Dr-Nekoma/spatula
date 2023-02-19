@@ -57,24 +57,24 @@ data PatternMatchState =
     deriving (Show, Eq)
 
 createBinds :: Type -> Pattern -> ResultT [(Label, Type)]
-createBinds type' (PVariable label) = pure [(label, type')]
+createBinds (FullNode _ type') (PVariable label) = pure [(label, type')]
 createBinds _ PWildcard = pure []
 createBinds type' p@(PDisjunctive firstPattern secondPattern) = do
   firstBinds <- createBinds type' firstPattern
   secondBinds <- createBinds type' secondPattern
   if sortOn fst firstBinds == sortOn fst secondBinds
     then pure firstBinds
-  else throwError' $ printf "TYPE ERROR: Not all the possibilities in the Or pattern %s have the same binds" (show p)
+  else throwError' p $ printf "TYPE ERROR: Not all the possibilities in the Or pattern %s have the same binds" (show p)
 createBinds type' p@(PAs pattern' label) = do
   binds <- createBinds type' pattern'
   case find ((== label) . fst) binds of
     Nothing -> pure $ (label, type') : binds
-    Just _ -> throwError' $ printf "TYPE ERROR: Recurrent label identified in pattern %s" (show p)
-createBinds (TAlgebraic constructors) (PSumType label patterns) = do
+    Just _ -> throwError' p $ printf "TYPE ERROR: Recurrent label identified in pattern %s" (show p)
+createBinds (TAlgebraic constructors) p2@(PSumType label patterns) = do
   types <- case find ((== label) . fst) constructors of
-             Nothing -> throwError' $ printf "TYPE ERROR: Constructor %s could not be found" (show label)
+             Nothing -> throwError' p2 $ printf "TYPE ERROR: Constructor %s could not be found" (show label)
              Just (_, types) | length types == length patterns -> pure types
-                             | otherwise -> throwError' $ printf "TYPE ERROR: List of types %s has a different length than the length of list of patterns %s" (show types) (show patterns)
+                             | otherwise -> throwError' p2 $ printf "TYPE ERROR: List of types %s has a different length than the length of list of patterns %s" (show types) (show patterns)
   binds <- concat <$> zipWithM createBinds types patterns
   foldM_ (\acc el -> if S.member el acc then throwError' "TYPE ERROR: Repeated bind found" else pure $ S.insert el acc) S.empty $ map fst binds
   pure binds
@@ -156,7 +156,7 @@ addFunctionsToEnv env typeName acc (TAbstraction (AbstractionInfo info kind type
   in addFunctionsToEnv env typeName newAcc type'
 addFunctionsToEnv env _ _ _ = env
 
-typeCheckDeclarations :: TyperEnv -> [Declaration] -> ResultT TyperEnv
+typeCheckDeclarations :: TyperEnv -> [FullNode Declaration] -> ResultT TyperEnv
 typeCheckDeclarations _ [] = throwError' "DECLARATION ERROR: No declarations found to type check"
 typeCheckDeclarations env list = foldM fun env list
   where fun acc decl = fromRight acc <$> typeCheckDeclaration acc decl
@@ -174,7 +174,7 @@ loadFile env filepath = do
     Left errorParse -> throwError' $ printf "DECLARATION ERROR: Could not load file %s. Error % was found" (filepath) (show errorParse)
     Right decls -> Right <$> foldM (\acc decl -> fromRight acc <$> typeCheckDeclaration acc decl) env decls
 
-typeCheckDeclaration :: TyperEnv -> Declaration -> ResultT (Either Type TyperEnv)
+typeCheckDeclaration :: TyperEnv -> FullNode Declaration -> ResultT (Either Type TyperEnv)
 typeCheckDeclaration env (DeclExpr expr) = Left <$> typeCheckExpression env expr
 typeCheckDeclaration env (DeclLoad filepath) = loadFile env filepath
 typeCheckDeclaration env@TyperEnv{..} (DeclVal name value) = do 
