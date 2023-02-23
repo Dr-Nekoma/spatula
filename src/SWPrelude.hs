@@ -4,7 +4,7 @@ module SWPrelude ( evaluatorPrelude, typerPrelude, aliasPrelude, kindPrelude ) w
 
 import Types
 import qualified Data.Map as Map
-import Utils ( ResultT, throwError' )
+import Utils ( ResultT, throwError', throwError'' )
 import Control.Monad.IO.Class (liftIO)
 import Evaluator
 import Data.Text ( Text, unpack, pack )
@@ -16,7 +16,7 @@ import System.IO.Error ( isDoesNotExistError )
 
 evaluatorPrelude :: Map.Map Text Value
 evaluatorPrelude = Map.fromList $
-                   map (fmap (VNativeFunction . NativeFunction))
+                   map (fmap (makeEmptyNode . VNativeFunction . NativeFunction))
                      [ ("print", ourPrint),
                        ("car", car),
                        ("cdr", cdr),
@@ -31,78 +31,128 @@ evaluatorPrelude = Map.fromList $
   
 typerPrelude :: Map.Map Text Type
 typerPrelude = Map.fromList list
-    where list = [("print", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TVariable (Name "T")) TUnit)),
-                  ("car", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TVariable (Name "T")))),
-                  ("cdr", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) (TList . TListInfo . Just $ TVariable (Name "T")))),
+    where list = [("print", printType),
+                  ("car", carType),
+                  ("cdr", cdrType),
                   ("map", mapType),
                   ("filter", filterType),
                   ("fold", foldType),
                   ("fold-back", foldType),
                   ("read-lines", readLinesType),
                   ("read-file", readFileType),
-                  ("is-list-empty", TForall $ AbstractionInfo (Name "T") StarK (TArrow (TList . TListInfo . Just $ TVariable (Name "T")) TBool)),
-                  ("string-to-integer", TArrow TString TInteger),
-                  ("T", TBool),
-                  ("F", TBool)]
+                  ("is-list-empty", isListEmptyType),
+                  ("string-to-integer", makeEmptyNode $ TArrow (makeEmptyNode TString) (makeEmptyNode TInteger)),
+                  ("T", makeEmptyNode TBool),
+                  ("F", makeEmptyNode TBool)]
 
 aliasPrelude :: Map.Map Text Type
 aliasPrelude = Map.fromList list
-  where list = [("String", TString),
-                ("Integer", TInteger),
-                ("Unit", TUnit),
-                ("Bool", TBool),
-                ("Rational", TRational),
-                ("List", TAbstraction (AbstractionInfo (Name "T") StarK (TList . TListInfo . Just $ TVariable (Name "T"))))]
+  where list = [("String", makeEmptyNode TString),
+                ("Integer", makeEmptyNode TInteger),
+                ("Unit", makeEmptyNode TUnit),
+                ("Bool", makeEmptyNode TBool),
+                ("Rational", makeEmptyNode TRational),
+                ("List", makeEmptyNode $
+                           TAbstraction (makeEmptyNode $
+                                          AbstractionInfo'
+                                          (makeEmptyNode (Name "T"))
+                                          (makeEmptyNode StarK)
+                                          (makeEmptyNode . TList . makeEmptyNode . TListInfo' . Just $ makeEmptyNode (TVariable (makeEmptyNode (Name "T"))))))]
 
 kindPrelude :: Map.Map TVariableInfo Kind
-kindPrelude = Map.fromList [(Name "String", StarK), (Name "Integer", StarK), (Name "Bool", StarK), (Name "Unit", StarK), (Name "Rational", StarK), (Name "List", ArrowK StarK StarK)]
+kindPrelude = Map.fromList [(makeEmptyNode  $ Name "String", makeEmptyNode StarK),
+                            (makeEmptyNode $ Name "Integer", makeEmptyNode StarK),
+                            (makeEmptyNode $ Name "Bool", makeEmptyNode StarK),
+                            (makeEmptyNode $ Name "Unit", makeEmptyNode StarK),
+                            (makeEmptyNode $ Name "Rational", makeEmptyNode StarK),
+                            (makeEmptyNode $ Name "List", makeEmptyNode $ ArrowK (makeEmptyNode StarK) (makeEmptyNode StarK))]
+
+carType :: Type
+carType = makeEmptyNode $
+  TForall $ makeEmptyNode $
+    AbstractionInfo' (makeEmptyNode (Name "T")) (makeEmptyNode StarK) $
+    makeEmptyNode (TArrow (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just . makeEmptyNode $ TVariable
+                             (makeEmptyNode $ Name "T"))
+                      (makeEmptyNode $ TVariable (makeEmptyNode $ Name "T")))
+
+cdrType :: Type
+cdrType = makeEmptyNode $ 
+  TForall $ makeEmptyNode $
+    AbstractionInfo' (makeEmptyNode (Name "T")) (makeEmptyNode StarK) $
+    makeEmptyNode (TArrow (makeEmptyNode $ TList . makeEmptyNode . TListInfo' . Just . makeEmptyNode $ TVariable
+                           (makeEmptyNode $ Name "T")) (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just . makeEmptyNode $
+                                                        TVariable (makeEmptyNode $ Name "T")))
+
+isListEmptyType :: Type
+isListEmptyType = makeEmptyNode $ TForall $
+  makeEmptyNode $ AbstractionInfo' (makeEmptyNode $ Name "T") (makeEmptyNode StarK) $
+  makeEmptyNode (TArrow (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just . makeEmptyNode $ TVariable
+                         (makeEmptyNode $ Name "T")) (makeEmptyNode TBool))
+
+printType :: Type
+printType = makeEmptyNode $
+  TForall $ makeEmptyNode $
+    AbstractionInfo'
+    (makeEmptyNode (Name "T"))
+      (makeEmptyNode StarK)
+      (makeEmptyNode (TArrow
+                       (makeEmptyNode (TVariable (makeEmptyNode (Name "T"))))
+                       (makeEmptyNode TUnit)))
 
 readLinesType :: Type
 readLinesType =
-  TArrow TString (TList . TListInfo . Just $ TString)
+  makeEmptyNode $ TArrow (makeEmptyNode TString) (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just $ makeEmptyNode TString)
 
 readFileType :: Type
 readFileType =
-  TArrow TString TString
+  makeEmptyNode $ TArrow (makeEmptyNode TString) (makeEmptyNode TString)
 
 mapType :: Type
 mapType =
-  TForall $ AbstractionInfo (Name "A") StarK
-  (TForall $ AbstractionInfo (Name "B") StarK
-   (TArrow (TArrow (TVariable (Name "A")) (TVariable (Name "B"))) (TArrow (TList . TListInfo . Just $ TVariable (Name "A")) (TList . TListInfo . Just $ TVariable (Name "B")))))
+  makeEmptyNode . TForall . makeEmptyNode $ AbstractionInfo' (makeEmptyNode (Name "A")) (makeEmptyNode StarK) $
+  makeEmptyNode (TForall . makeEmptyNode $ AbstractionInfo' (makeEmptyNode (Name "B")) (makeEmptyNode StarK) $
+   makeEmptyNode (TArrow (makeEmptyNode (TArrow (makeEmptyNode . TVariable $ makeEmptyNode (Name "A")) (makeEmptyNode $ TVariable (makeEmptyNode (Name "B")))))
+                  (makeEmptyNode (TArrow (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just $ makeEmptyNode . TVariable $ makeEmptyNode (Name "A"))
+                                  (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just . makeEmptyNode . TVariable $ makeEmptyNode (Name "B"))))))
 
 filterType :: Type
 filterType =
-  TForall $ AbstractionInfo (Name "A") StarK
-   (TArrow (TArrow (TVariable (Name "A")) TBool) (TArrow (TList . TListInfo . Just $ TVariable (Name "A")) (TList . TListInfo . Just $ TVariable (Name "A"))))
+  makeEmptyNode . TForall . makeEmptyNode $ AbstractionInfo' (makeEmptyNode (Name "A")) (makeEmptyNode StarK) $
+   makeEmptyNode (TArrow (makeEmptyNode $ TArrow (makeEmptyNode . TVariable $ makeEmptyNode (Name "A")) (makeEmptyNode TBool)) $
+                  makeEmptyNode (TArrow (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just . makeEmptyNode . TVariable $ makeEmptyNode (Name "A")) $
+                                 makeEmptyNode (TList . makeEmptyNode $ TListInfo' . Just . makeEmptyNode . TVariable $ makeEmptyNode (Name "A"))))
 
 foldType :: Type
 foldType =
-  TForall $ AbstractionInfo (Name "A") StarK
-  (TForall $ AbstractionInfo (Name "B") StarK
-   (TArrow (TArrow (TVariable (Name "A")) (TArrow (TVariable (Name "B")) (TVariable (Name "B")))) 
-     (TArrow (TVariable (Name "B")) (TArrow (TList . TListInfo . Just $ TVariable (Name "A")) (TVariable (Name "B"))))))
+  makeEmptyNode . TForall . makeEmptyNode $ AbstractionInfo' (makeEmptyNode (Name "A")) (makeEmptyNode StarK) $
+  makeEmptyNode (TForall . makeEmptyNode $ AbstractionInfo' (makeEmptyNode (Name "B")) (makeEmptyNode StarK) $
+   makeEmptyNode (TArrow (makeEmptyNode $ TArrow (makeEmptyNode $ TVariable (makeEmptyNode $ Name "A"))
+                          (makeEmptyNode $ TArrow (makeEmptyNode $ TVariable (makeEmptyNode $ Name "B")) (makeEmptyNode $ TVariable (makeEmptyNode $ Name "B")))) $
+     makeEmptyNode (TArrow (makeEmptyNode $ TVariable (makeEmptyNode $ Name "B"))
+                    (makeEmptyNode $ TArrow (makeEmptyNode $ TList . makeEmptyNode $ TListInfo' . Just $
+                                                  makeEmptyNode $ TVariable (makeEmptyNode $ Name "A"))
+                                         (makeEmptyNode $ TVariable (makeEmptyNode $ Name "B"))))))
 
 boolean :: Bool -> Value
-boolean = VLiteral . LBool
+boolean = makeEmptyNode . VLiteral . makeEmptyNode . LBool
 
 stringToInteger :: Value -> ResultT Value
-stringToInteger (VLiteral (LString str)) = pure . VLiteral . LInteger . read $ unpack str
+stringToInteger (FullNode meta (VLiteral (FullNode meta' (LString str)))) = pure . FullNode meta . VLiteral . FullNode meta' . LInteger . read $ unpack str
 stringToInteger _ = fail "Function 'stringToInteger' can only be used on strings"
 
 isEmpty :: Value -> ResultT Value
-isEmpty (VList []) = pure $ boolean False
-isEmpty (VList _) = pure $ boolean True
+isEmpty (FullNode _ (VList [])) = pure $ boolean False
+isEmpty (FullNode _ (VList _)) = pure $ boolean True
 isEmpty _ = fail "Function 'isEmpty' can only be applied to lists"
 
 car :: Value -> ResultT Value
-car (VList []) = fail "Can't apply 'car' function in empty lists"
-car (VList list) = return . head $ list
+car (FullNode _ (VList [])) = fail "Can't apply 'car' function in empty lists"
+car (FullNode _ (VList list)) = return . head $ list
 car _ = fail "Function 'car' can only be applied to lists"
 
 cdr :: Value -> ResultT Value
-cdr (VList []) = fail "Can't apply 'cdr' to an empty list"
-cdr (VList list) = return . VList . tail $ list
+cdr (FullNode _ (VList [])) = fail "Can't apply 'cdr' to an empty list"
+cdr (FullNode meta (VList list)) = return . FullNode meta . VList . tail $ list
 cdr _ = fail "Function 'car' can only be applied to lists"
 
 safeRead :: String -> IO (Maybe Text)
@@ -114,39 +164,39 @@ safeRead path = (fmap (Just . pack) $ readFile path) `catch` handleExists
       | otherwise = throwIO e
 
 readLines :: Value -> ResultT Value
-readLines (VLiteral (LString path)) = do
+readLines (FullNode meta (VLiteral (FullNode meta' (LString path)))) = do
   maybeContent <- liftIO $ safeRead (unpack path)
   case maybeContent of
-    Nothing -> throwError' $ printf "Couldn't find file from path %s" (unpack path)
-    Just content -> return . VList $ map (VLiteral . LString . pack) (lines $ unpack content)
+    Nothing -> throwError'' meta' $ printf "Couldn't find file from path %s" (unpack path)
+    Just content -> return . FullNode meta . VList $ map (FullNode meta' . VLiteral . FullNode meta' . LString . pack) (lines $ unpack content)
 readLines _ = fail ""
 
 readFile' :: Value -> ResultT Value
-readFile' (VLiteral (LString path)) = do
+readFile' (FullNode meta (VLiteral (FullNode meta' (LString path)))) = do
   maybeContent <- liftIO $ safeRead (unpack path)
   case maybeContent of
-    Nothing -> throwError' $ printf "Couldn't find file from path %s" (unpack path)
-    Just content -> return . VLiteral $ LString content
+    Nothing -> throwError'' meta' $ printf "Couldn't find file from path %s" (unpack path)
+    Just content -> return . FullNode meta . VLiteral . FullNode meta' $ LString content
 readFile' _ = fail ""
 
 map' :: Value -> ResultT Value
 map' fun =
   let fun' = getFunctionalValue fun
-  in return $ VNativeFunction . NativeFunction
+  in return . makeEmptyNode $ VNativeFunction . NativeFunction
       $ \case
-         VList list'
-           -> VList <$> for list' fun'
+         (FullNode meta (VList list'))
+           -> FullNode meta . VList <$> for list' fun'
          _ -> fail "Expecting a list as an argument for the map function"
 
 filter' :: Value -> ResultT Value
 filter' fun =
   let fun' = getFunctionalValue fun
-  in return $ VNativeFunction . NativeFunction
+  in return . makeEmptyNode $ VNativeFunction . NativeFunction
       $ \case
-         VList list'
-           -> VList
+         (FullNode meta (VList list'))
+           -> FullNode meta . VList
                 . map fst
-                   . filter (\ (_, a) -> a == VLiteral (LBool True)) . zip list'
+                   . filter (\ (_, a) -> a == makeEmptyNode (VLiteral (makeEmptyNode $ LBool True))) . zip list'
                 <$> for list' fun'
          _ -> fail "Expecting a list as an argument for the filter function"
 
@@ -156,21 +206,21 @@ foldAux fun' element acc = do
   getFunctionalValue next element
 
 getFunctionalValue :: Value -> Value -> ResultT Value
-getFunctionalValue (VClosure label body env) = \element -> evalExpression (Map.insert label element env) body
-getFunctionalValue (VNativeFunction (NativeFunction fun)) = fun
+getFunctionalValue (FullNode _ (VClosure label body env)) = \element -> evalExpression (Map.insert (removeMetadata label) element env) body
+getFunctionalValue (FullNode _ (VNativeFunction (NativeFunction fun))) = fun
 getFunctionalValue _ = error "Should not happen"
     
 fold' :: ([Value] -> [Value]) -> Value -> ResultT Value
 fold' transform fun =
    let fun' = getFunctionalValue fun
-   in return $ VNativeFunction . NativeFunction
-       $ \acc -> return $ VNativeFunction . NativeFunction
+   in return . makeEmptyNode $ VNativeFunction . NativeFunction
+       $ \acc -> return . makeEmptyNode $ VNativeFunction . NativeFunction
           $ \case
-             VList list'
+             (FullNode _ (VList list'))
                -> foldM (foldAux fun') acc (transform list')
              _ -> fail "Expecting a list as an argument for the fold function"
 
 ourPrint :: Value -> ResultT Value
 ourPrint value = do
     liftIO $ print value
-    return VUnit
+    return $ makeEmptyNode VUnit

@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-module Utils ( Result, ResultT, throwError', throwError'', buildMessage, buildError, printMessage, addErrorColor, addSuccessColor, printWarning ) where
+module Utils ( Result, ResultT, throwError', throwError'', throwErrorMessage, buildMessage, buildError, printMessage, addErrorColor, addSuccessColor, printWarning, printWarning' ) where
 
 import Control.Monad.Except
 import Data.String ( IsString(..) )
@@ -13,24 +13,22 @@ import Text.Parsec
 type Result a = Either T.Text a
 type ResultT a = ExceptT T.Text IO a
 
--- throwError' :: String -> ResultT a
--- throwError' = throwError . pack
+throwErrorMessage :: (IsString e, MonadError e m) => String -> m a
+throwErrorMessage = throwError . fromString
 
 throwError' :: (IsString e, MonadError e m) => FullNode a -> String -> m a
 throwError' node msg = 
   let p = getMetadata node
-      line = sourceLine p
-      col = sourceColumn p
-  in throwError . fromString $ buildErrorLocation (sourceName p) line col ++ "\n" ++ msg
+  in throwError . fromString $ buildLocation p ++ "\n" ++ msg
 
 throwError'' :: (IsString e, MonadError e m) => Metadata -> String -> m a
-throwError'' p msg = 
-  let line = sourceLine p
-      col = sourceColumn p
-  in throwError . fromString $ buildErrorLocation (sourceName p) line col ++ "\n" ++ msg
+throwError'' p msg = throwError . fromString $ buildLocation p ++ "\n" ++ msg
 
-buildErrorLocation :: FilePath -> Line -> Column -> String
-buildErrorLocation file line col = "In " ++ file ++ " | line " ++ show line ++ ", column " ++ show col
+buildLocation :: Metadata -> String
+buildLocation meta = "In " ++ file ++ " | line " ++ show line ++ ", column " ++ show col
+  where file = sourceName meta
+        line = sourceLine meta
+        col = sourceColumn meta
 
 buildError :: (Show a) => a -> T.Text
 buildError error' = T.pack $ "\ESC[91m" <> show error'
@@ -51,5 +49,8 @@ printMessage (Right a) = justPrint $ buildMessage a
 justPrint :: T.Text -> IO ()
 justPrint = TIO.putStrLn . T.filter (/= '"')
 
-printWarning :: MonadIO m => [Char] -> m ()
-printWarning msg = liftIO . putStrLn $ "\ESC[93m" ++ msg ++ "\ESC[00m"
+printWarning :: MonadIO m => FullNode a -> [Char] -> m ()
+printWarning (FullNode meta _) = printWarning' meta
+
+printWarning' :: MonadIO m => Metadata -> [Char] -> m ()
+printWarning' meta msg = liftIO . putStrLn $ "\ESC[93m" ++ buildLocation meta ++ msg ++ "\ESC[00m"

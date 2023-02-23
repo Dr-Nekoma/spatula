@@ -315,7 +315,7 @@ data Expression'
 
 type Metadata = SourcePos
 
-data FullNode a = FullNode Metadata a deriving Show
+data FullNode a = FullNode Metadata a
 
 makeEmptyNode :: a -> FullNode a
 makeEmptyNode = FullNode emptyMetadata
@@ -323,6 +323,9 @@ makeEmptyNode = FullNode emptyMetadata
 
 makeNamedMetadata :: String -> Metadata
 makeNamedMetadata = initialPos
+
+instance (Show a) => Show (FullNode a) where
+  show (FullNode _ a) = show a
 
 instance Functor FullNode where
   fmap f (FullNode m v) = FullNode m (f v)

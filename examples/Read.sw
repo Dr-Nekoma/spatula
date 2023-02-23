@@ -1,2 +1,2 @@
-[print !String [read-file "examples/Read.sw"]]
+[print !Integer [read-file "examples/Read.sw"]]
 

@@ -15,6 +15,7 @@ import Parser
 import Control.Monad.Except ( runExceptT )
 import SWPrelude
 import Control.Monad ( when )
+import Control.Monad.IO.Class
 import qualified Data.Map as Map
 import Utils
 import Repl
@@ -26,7 +27,7 @@ fullExecution filename = do
     parserResult <- customParse fileP filename
     case parserResult of
       Left errorParse -> TIO.putStrLn $ buildError (errorParse :: ParseError)
-      Right decls -> do
+      Right (FullNode _ decls) -> do
           typeEnv' <- runExceptT $ typeCheckDeclarations typerInitialEnv decls
           case typeEnv' of
            Left errorType -> TIO.putStrLn $ "\ESC[91m" <> errorType
