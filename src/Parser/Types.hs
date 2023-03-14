@@ -3,27 +3,35 @@ module Parser.Types where
 
 import Types
 import Parser.Kinds
-import Parser.Utilities ( ParserT, arrowP, skip, variableGeneric, argAnd, Keyword(..))
+import Parser.Utilities ( ParserT, arrowP, skip, variableGeneric, argAnd, Keyword(..), liftParser)
 import Text.Parsec
+import Control.Monad
 
 typeP :: ParserT st Type
 typeP = choice $ fmap try [arrowP typeP, typeForAll, typeApplication, typeAnonymousRecord, typeAlias]
 
 typeApplication :: ParserT st Type
-typeApplication = foldl TApplication <$> (char '|' *> typeP) <*> many1 (skip *> typeP <* skip) <* char '|'
+typeApplication = do
+  type' <- char '|' *> typeP
+  types <- many1 (skip *> typeP <* skip) <* char '|'
+  let fun acc element =
+        let meta = getMetadata acc
+        in FullNode meta (TApplication acc element)
+  pure $ foldl fun type' types
 
 typeApplied :: ParserT st Type
 typeApplied = char '!' *> typeP
 
 typeAlias :: ParserT st Type
-typeAlias = TAliasPlaceholder <$> variableGeneric
+typeAlias = liftParser $ TAliasPlaceholder <$> variableGeneric
 
 typeAnonymousRecord :: ParserT st Type
-typeAnonymousRecord = TAnonymousRecord <$> (string "{|" *> skip *> many1 (argAnd typeP) <* skip <* string "|}")
+typeAnonymousRecord = liftParser $ TAnonymousRecord <$> (string "{|" *> skip *> many1 (argAnd typeP) <* skip <* string "|}")
 
 typeForAll :: ParserT st Type
 typeForAll = do
-  _ <- char '(' *> skip *> string (show Forall) <* skip
-  typeVariableKind <- AbstractionInfo . Name <$> (variableGeneric <* skip <* char '.' <* skip) <*> kindP
-  _ <- skip *> char ';' <* skip
-  TForall . typeVariableKind <$> (skip *> typeP <* skip <* char ')')
+  void $ char '(' *> skip *> string (show Forall) <* skip
+  typeVariableKind <- AbstractionInfo' . fmap Name <$> (variableGeneric <* skip <* char '.' <* skip) <*> kindP
+  void $ skip *> char ';' <* skip
+  info <- liftParser $ typeVariableKind <$> (skip *> typeP <* skip <* char ')')
+  liftParser . pure $ TForall info

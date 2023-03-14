@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE FlexibleContexts #-}
 module Parser.Utilities
   (
     ParserT
@@ -16,6 +17,9 @@ module Parser.Utilities
   , skip
   , argAnd
   , simpleString
+  , customParse
+  , liftParser
+  , variable
   )
 where
  
@@ -28,18 +32,26 @@ import Control.Monad
 
 type ParserT st = Parsec [Char] st
 
-typeVariableGeneric :: ParserT st Text
+liftParser :: ParserT st a -> ParserT st (FullNode a)
+liftParser parser = do
+  pos <- getPosition
+  FullNode pos <$> parser
+  
+customParse :: ParserT () a -> FilePath -> IO (Either ParseError (FullNode a))
+customParse parser file = parse (liftParser parser) file <$> readFile file
+
+typeVariableGeneric :: ParserT st (FullNode Text)
 typeVariableGeneric = do
-  char '!' >> do str <- variable
+  char '!' >> do (FullNode meta str) <- variable
                  if member str invalidVariables
                  then parserFail "Unexpected identifier for type variable name"
-                 else return (pack str)
+                 else pure $ FullNode meta (pack str)
 
-openDelimiter :: ParserT st Char
-openDelimiter = char '[' <* skip
+openDelimiter :: ParserT st (FullNode Char)
+openDelimiter = liftParser $ char '[' <* skip
 
-closeDelimiter :: ParserT st Char
-closeDelimiter = skip *> char ']' 
+closeDelimiter :: ParserT st (FullNode Char)
+closeDelimiter = liftParser $ skip *> char ']' 
 
 data Delimiter =
     LeftBracket
@@ -120,7 +132,7 @@ keyWords :: [String]
 keyWords = map show ([minBound .. maxBound] :: [Keyword])
 
 operators :: [String]
-operators = map show ([minBound .. maxBound] :: [Operator])
+operators = map show ([minBound .. maxBound] :: [Operator'])
 
 invalidVariables :: Set String
 invalidVariables = fromList $ keyWords ++ delimiters ++ operators
@@ -130,33 +142,33 @@ isAllowed = and . sequence [canBe, cantBe]
   where canBe = or . sequence [isAlphaNum, isSymbol, isAscii]
         cantBe c = not . any ((== c) . head) $ " " : delimiters ++ ["\n"]
 
-skip :: ParserT st ()
-skip = void $ spaces *> many single <* spaces
+skip :: ParserT st (FullNode ())
+skip = liftParser $ void $ spaces *> many single <* spaces
   where single = try (spaces *> commentBlock <* spaces) <|> try (spaces *> commentLine <* spaces)
 
-commentBlock :: ParserT st String
-commentBlock = string (show BeginCommentBlock) *> manyTill anyChar (try (string $ show CloseCommentBlock))
+commentBlock :: ParserT st (FullNode String)
+commentBlock = liftParser $ string (show BeginCommentBlock) *> manyTill anyChar (try (string $ show CloseCommentBlock))
 
-commentLine :: ParserT st String
-commentLine = string (show LineComment) *> manyTill anyChar (try (char '\n') <|> try (eof >> char ' '))
+commentLine :: ParserT st (FullNode String)
+commentLine = liftParser $ string (show LineComment) *> manyTill anyChar (try (char '\n') <|> try (eof >> char ' '))
 
-variable :: ParserT st String
+variable :: ParserT st (FullNode String)
 variable = do
-  str <- many1 (satisfy isAllowed)
+  str <- liftParser $ many1 (satisfy isAllowed)
   notFollowedBy (lookAhead (satisfy (not . isAllowed)))
-  return str
+  pure str
   
-variableGeneric :: ParserT st Text
+variableGeneric :: ParserT st (FullNode Text)
 variableGeneric = do
-  str <- variable
+  (FullNode meta str) <- variable
   if member str invalidVariables
   then parserFail "Unexpected identifier for variable name"
-  else return (pack str)
+  else pure $ FullNode meta (pack str)
 
-argAnd :: ParserT st a -> ParserT st (Text, a)
-argAnd a = (,) <$> (char '(' *> skip *> choice (fmap try [variableGeneric, pack <$> string "_"]) <* skip) <*> (a <* skip <* char ')' <* skip)
+argAnd :: ParserT st (FullNode a) -> ParserT st (FullNode Text, FullNode a)
+argAnd a = (,) <$> (char '(' *> skip *> choice (fmap try [variableGeneric, liftParser $ pack <$> string "_"]) <* skip) <*> (a <* skip <* char ')' <* skip)
 
-curriedArrow :: Curryable a => [a] -> a -> a
+curriedArrow :: Curryable a a => [a] -> a -> a
 curriedArrow types returnType = Prelude.foldr kurry returnType types  
 
 listArrowP :: ParserT st a -> ParserT st [a]
@@ -165,13 +177,13 @@ listArrowP p = between (char '(' *> skip) (skip *> char ')') (many1 (skip *> p))
 listP :: ParserT st a -> ParserT st [a]
 listP p = between openDelimiter closeDelimiter (many1 (skip *> p))
 
-arrowP :: Curryable a => ParserT st a -> ParserT st a
+arrowP :: Curryable a a => ParserT st a -> ParserT st a
 arrowP p = 
   let arrow = string "->" *> skip
       returnType = skip *> p
   in between (char '(' *> skip) (skip *> char ')') (curriedArrow <$> (arrow *> listArrowP p) <*> returnType)
 
-simpleString :: ParserT st String
+simpleString :: ParserT st (FullNode String)
 simpleString = do
   void $ char '"'
-  manyTill anyChar (try $ char '"')
+  liftParser $ manyTill anyChar (try $ char '"')
