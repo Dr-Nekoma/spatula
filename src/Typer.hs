@@ -380,7 +380,7 @@ typeCheckExpression env@TyperEnv{..} (FullNode _ (EAbstraction label t returnTyp
                               reducedResultType = reduceType resultType
                           if reducedAnnotatedType == reducedResultType
                           then pure . FullNode meta $ TArrow type' potentialAlias
-                          else throwError'' (getMetadata potentialAlias) $ printf "TYPE ERROR 1: Body type %s does not match annotated return type %s." (show potentialAlias) (show resultType)
+                          else throwError'' (getMetadata potentialAlias) $ printf "TYPE ERROR 1: Body type %s does not match annotated return type %s." (puts resultType) (puts potentialAlias)
                         (FullNode meta other) -> throwError'' meta $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
         Nothing -> pure . FullNode meta' $ TArrow type' resultType
     (FullNode meta' other) -> throwError'' meta' $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
@@ -388,14 +388,14 @@ typeCheckExpression env@TyperEnv{..} (FullNode _ (EAbstraction label t returnTyp
 typeCheckExpression env (FullNode meta (EApplication fun arg)) = do
   reducedFunType <- reduceType <$> typeCheckExpression env fun
   case reducedFunType of
-    (FullNode _ (TArrow parameterType resultType)) -> do
+    (FullNode meta' (TArrow parameterType resultType)) -> do
       reducedArgType <- reduceType <$> typeCheckExpression env arg
       let reducedParameterType = reduceType parameterType
       if reducedArgType == reducedParameterType
         then pure resultType
       else do
-        throwError'' (getMetadata arg) $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
-    _ -> throwError'' meta $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (show reducedFunType)
+        throwError'' (getMetadata fun) $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (puts parameterType) (puts reducedArgType)
+    _ -> throwError'' meta $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (puts reducedFunType)
 
 typeCheckExpression env (FullNode meta (ECondition cond thenBranch elseBranch)) = do
   condType <- typeCheckExpression env cond

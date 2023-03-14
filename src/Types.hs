@@ -183,7 +183,7 @@ instance Show Type' where
   show TRational = "Rational"
   show TBool = "Bool"
   show TString = "String"
-  show (TList (FullNode _ (TListInfo' (Just type')))) = printf "|List %s|" (show type')
+  show (TList (FullNode _ (TListInfo' (Just type')))) = printf "|List %s|" (show $ removeMetadata type')
   show (TList (FullNode _ (TListInfo' Nothing))) = "|List|"
   show (TArrow source target) =
     case removeMetadata source of
@@ -200,11 +200,12 @@ instance Show Type' where
   show (TAnonymousRecord list) = go "| Anonymous Record | " list
     where go acc [] = acc ++ "\n"
           go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ " ") xs
-  show (TNominalRecord name []) = unpack (removeMetadata name)
-  show (TNominalRecord name list) = go ("| " ++ unpack (removeMetadata name) ++ " |") list
-    where go acc [] = acc ++ "\n"
-          go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ " ") xs
-  show (TAlgebraic []) = "Empty ADT"
+  show (TNominalRecord name _) = unpack $ "Record " <> removeMetadata name
+  -- show (TNominalRecord name []) = unpack (removeMetadata name)
+  -- show (TNominalRecord name list) = go ("| " ++ unpack (removeMetadata name) ++ " |") list
+  --   where go acc [] = acc ++ "\n"
+  --         go acc ((name, type'):xs) = go (acc ++ "Field: " ++ show name ++ " - Type: " ++ show type' ++ " ") xs
+  -- show (TAlgebraic []) = "Empty ADT"
   show (TAlgebraic list) = go "| ADT | " list
     where go acc [] = acc ++ "\n"
           go acc ((name, types):xs) = go (acc ++ "Tag: " ++ show name ++ " - Types: " ++ show types ++ " ") xs
@@ -332,7 +333,7 @@ instance (Show a) => Show (FullNode a) where
 --  show (FullNode _ a) = show a
 
 puts :: (Show a) => FullNode a -> Text
-puts (FullNode m a) = "(" <> pack (show a) <> " | " <> pack (show m) <> ")"
+puts = pack . show . removeMetadata
 
 instance Functor FullNode where
   fmap f (FullNode m v) = FullNode m (f v)

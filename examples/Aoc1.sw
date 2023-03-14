@@ -17,8 +17,9 @@
         [if [< [getr accumulator currentMax] candidate]
           [setr new-accumulator [(currentMax candidate)]]
           new-accumulator]]
+     // Let plus is different!
      [let-plus [[number-calories [string-to-integer str-calories]]
-                [new-current [+ number-calories [getr accumulator current]]]
+                [new-current [+ number-calories [getr accumulator current]]] // This uses number-calories!
 		[new-accumulator [setr accumulator [(current new-current)]]]]
         new-accumulator]]]
 
@@ -28,6 +29,11 @@
      [print !Integer [getr [fold !String !SingleElfCarrier aux-fold-1 initial-accumulator lines] currentMax]]]]
 
 // Part 2
+
+{;
+Pay attention to the new carrier.
+It it just another type alias with the same ElfCarrier record!
+;}
 
 [defalgebraic Triplet (Values Integer Integer Integer)]
 

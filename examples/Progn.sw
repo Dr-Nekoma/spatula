@@ -1,6 +1,6 @@
 [defun inc [(x Integer)] : Integer [+ x 1]]
 
-[defun abc [(x Integer)] : Unit 
+[defun abc [(x Integer)] : Unit
     [if [= x 1]
         [progn 
             [print !String "I love Postgresql <3"] 
