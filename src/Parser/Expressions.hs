@@ -13,7 +13,9 @@ import Control.Monad.IO.Class
 import Control.Monad (void)
 
 exprLiteral :: ParserT st Expression
-exprLiteral = liftParser $  ELiteral <$> literal
+exprLiteral = do
+  (FullNode meta lit) <- literal
+  pure . FullNode meta $ ELiteral lit
 
 exprVariable :: ParserT st Expression
 exprVariable = liftParser $ EVariable <$> variableGeneric
@@ -24,7 +26,7 @@ exprApplication = do
   let function acc@(FullNode meta _) = either (FullNode meta . ETypeApplication acc) (FullNode  meta . EApplication acc)
   case content of
     [single] -> case single of
-                  Right expr@(FullNode meta _) -> liftParser . pure $ EApplication expr (FullNode meta (ELiteral (FullNode meta LUnit)))
+                  Right expr@(FullNode meta _) -> liftParser . pure $ EApplication expr (FullNode meta (ELiteral LUnit))
                   Left _ -> parserFail "Unexpected type for application or type application"
     ((Left _):_) -> parserFail "Unexpected type for application or type application"
     ((Right fun):args) -> return $ foldl function fun args
@@ -82,7 +84,9 @@ patternVariable :: ParserT st Pattern
 patternVariable = liftParser $ PVariable <$> variableGeneric
 
 patternLiteral :: ParserT st Pattern
-patternLiteral = liftParser $ PLiteral <$> literal
+patternLiteral = do
+  (FullNode meta lit) <- literal
+  pure . FullNode meta $ PLiteral lit
 
 patternAs :: ParserT st Pattern
 patternAs = liftParser $ PAs <$> (skip *> string (show NamedPattern1) *> skip *> patternP <* skip) <*> (string (show NamedPattern2) *> skip *> variableGeneric <* skip)

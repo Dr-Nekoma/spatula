@@ -34,7 +34,7 @@ type Value = FullNode Value'
 
 data Value'
     = VUnit
-    | VLiteral Literal
+    | VLiteral Literal'
     | VClosure Label Expression EvalEnv
     | VNativeFunction NativeFunction
     | VList [Value]
@@ -128,7 +128,7 @@ createBinds2 (FullNode _ (VAlgebraic identifier values)) (FullNode  _  (PSumType
   if identifier == constructor
   then concat <$> zipWithM createBinds2 values patterns
   else Nothing
-createBinds2 (FullNode _ VUnit) (FullNode _ (PLiteral (FullNode _ LUnit))) = Just []
+createBinds2 (FullNode _ VUnit) (FullNode _ (PLiteral LUnit)) = Just []
 createBinds2 (FullNode _ (VLiteral value')) (FullNode _ (PLiteral value)) = if value == value' then Just [] else Nothing
 createBinds2 _ _ = Nothing
 
@@ -148,7 +148,7 @@ evalExpression env (FullNode meta (EPatternMatching toMatch list)) = do
               Just g -> do
                 evaluatedGuard <- evalExpression newEnv g
                 case removeMetadata evaluatedGuard of
-                  VLiteral (FullNode _ (LBool True)) -> Just <$> evalExpression newEnv body
+                  VLiteral (LBool True) -> Just <$> evalExpression newEnv body
                   _ -> pure Nothing
       folder expr _ = pure expr
   expr <- foldM folder Nothing list
@@ -220,7 +220,7 @@ evalExpression env (FullNode meta (EApplication fun arg)) = do
 evalExpression env (FullNode meta (ECondition cond thenBranch elseBranch)) = do
   test <- evalExpression env cond
   case test of
-    (FullNode _ (VLiteral (FullNode _ (LBool b)))) ->
+    (FullNode _ (VLiteral (LBool b))) ->
       if b then
         evalExpression env thenBranch
       else
@@ -239,30 +239,30 @@ evalExpression env (FullNode meta (ELet p@(FullNode _ Plus) ((label, expr):xs) b
   evaluatedExpression <- evalExpression env expr
   evalExpression (Map.insert (removeMetadata label) evaluatedExpression env) (FullNode meta $ ELet p xs body)
 
-evalExpression _ (FullNode meta (EOperation (FullNode meta' OpAnd) [])) = return . FullNode meta . VLiteral $ FullNode meta' (LBool True)
+evalExpression _ (FullNode meta (EOperation (FullNode _ OpAnd) [])) = return . FullNode meta . VLiteral $ LBool True
 evalExpression env (FullNode _ (EOperation (FullNode _ OpAnd) (x:xs))) = do
   operand <- evalExpression env x
   case operand of
-    (FullNode meta (VLiteral (FullNode meta' (LBool False)))) -> pure . FullNode meta . VLiteral $ FullNode meta' (LBool False)
-    (FullNode meta (VLiteral (FullNode meta' (LBool True)))) -> evalExpression env (FullNode meta $ EOperation (FullNode  meta' OpAnd) xs)
+    (FullNode meta (VLiteral (LBool False))) -> pure . FullNode meta . VLiteral $ LBool False
+    (FullNode meta (VLiteral (LBool True))) -> evalExpression env (FullNode meta $ EOperation (FullNode meta OpAnd) xs)
     _ -> error "This should never happen"
 
 -- TODO: Instead of relying on recursive calls of evalExpression, let's make an internal function and do the recursion there
-evalExpression _ (FullNode meta (EOperation (FullNode meta' OpOr) [])) = return . FullNode meta . VLiteral $ FullNode meta' (LBool False)
+evalExpression _ (FullNode meta (EOperation (FullNode _ OpOr) [])) = return . FullNode meta . VLiteral $ LBool False
 evalExpression env (FullNode _ (EOperation (FullNode _ OpOr) (x:xs))) = do
   operand <- evalExpression env x
   case operand of
-    (FullNode meta (VLiteral (FullNode meta' (LBool True))))  -> pure . FullNode meta . VLiteral $ FullNode meta' (LBool True)
-    (FullNode meta (VLiteral (FullNode meta' (LBool False)))) -> evalExpression env (FullNode meta $ EOperation (FullNode meta' OpOr) xs)
+    (FullNode meta (VLiteral (LBool True)))  -> pure . FullNode meta . VLiteral $ LBool True
+    (FullNode meta (VLiteral (LBool False))) -> evalExpression env (FullNode meta $ EOperation (FullNode meta OpOr) xs)
     _ -> error "This should never happen"
 
-evalExpression _ (FullNode meta (EOperation (FullNode meta' OpEqual) [])) = return . FullNode meta . VLiteral $ FullNode meta' (LBool True)
+evalExpression _ (FullNode meta (EOperation (FullNode _ OpEqual) [])) = return . FullNode meta . VLiteral $ LBool True
 evalExpression env (FullNode meta (EOperation (FullNode meta' OpEqual) (x:xs:rest))) = do
   operand1 <- evalExpression env x
   operand2 <- evalExpression env xs
   if operand1 == operand2
   then evalExpression env $ FullNode meta (EOperation (FullNode meta' OpEqual) rest)
-  else return . FullNode meta . VLiteral $ FullNode meta' (LBool False)
+  else return . FullNode meta . VLiteral $ LBool False
 
 evalExpression env (FullNode meta (EOperation operator list@(_:_:_))) = do
   (x':xs') <- for list (evalExpression env)
@@ -280,14 +280,14 @@ evalExpression env (FullNode _ (ETypeApplication expr _)) =
 
 operatorFunction :: Operator' -> Value' -> Value' -> Value'
 operatorFunction OpConcat (VList left) (VList right) = VList $ left ++ right
-operatorFunction OpLessThan (VLiteral (removeMetadata -> (LInteger element))) (VLiteral (removeMetadata -> (LInteger acc))) = VLiteral . makeEmptyNode . LBool $ element < acc
-operatorFunction OpLessThan (VLiteral (removeMetadata -> (LRational element))) (VLiteral (removeMetadata -> (LRational acc))) = VLiteral .makeEmptyNode . LBool $ element < acc
-operatorFunction OpPlus (VLiteral (removeMetadata -> (LInteger element))) (VLiteral (removeMetadata -> (LInteger acc))) = VLiteral .makeEmptyNode . LInteger $ element + acc
-operatorFunction OpPlus (VLiteral (removeMetadata -> (LRational element))) (VLiteral (removeMetadata -> (LRational acc))) = VLiteral .makeEmptyNode . LRational $ element + acc
-operatorFunction OpMul (VLiteral (removeMetadata -> (LInteger element))) (VLiteral (removeMetadata -> (LInteger acc))) = VLiteral .makeEmptyNode . LInteger $ element * acc
-operatorFunction OpMul (VLiteral (removeMetadata -> (LRational element))) (VLiteral (removeMetadata -> (LRational acc))) = VLiteral .makeEmptyNode . LRational $ element * acc
-operatorFunction OpDiv (VLiteral (removeMetadata -> (LInteger element))) (VLiteral (removeMetadata -> (LInteger acc))) = VLiteral .makeEmptyNode . LInteger $ div element acc
-operatorFunction OpDiv (VLiteral (removeMetadata -> (LRational element))) (VLiteral (removeMetadata -> (LRational acc))) = VLiteral .makeEmptyNode . LRational $ element / acc
-operatorFunction OpMinus (VLiteral (removeMetadata -> (LInteger element))) (VLiteral (removeMetadata -> (LInteger acc))) = VLiteral .makeEmptyNode . LInteger $ element - acc
-operatorFunction OpMinus (VLiteral (removeMetadata -> (LRational element))) (VLiteral (removeMetadata -> (LRational acc))) = VLiteral .makeEmptyNode . LRational $ element - acc
+operatorFunction OpLessThan (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral .  LBool $ element < acc
+operatorFunction OpLessThan (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LBool $ element < acc
+operatorFunction OpPlus (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element + acc
+operatorFunction OpPlus (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element + acc
+operatorFunction OpMul (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element * acc
+operatorFunction OpMul (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element * acc
+operatorFunction OpDiv (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ div element acc
+operatorFunction OpDiv (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element / acc
+operatorFunction OpMinus (VLiteral (LInteger element)) (VLiteral (LInteger acc)) = VLiteral . LInteger $ element - acc
+operatorFunction OpMinus (VLiteral (LRational element)) (VLiteral (LRational acc)) = VLiteral . LRational $ element - acc
 operatorFunction op element acc = error $ printf "Error in fold of %s with element %s and accumulator %s" (show op) (show element) (show acc)

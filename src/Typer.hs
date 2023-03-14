@@ -79,11 +79,11 @@ createBinds (FullNode _ (TAlgebraic constructors))(FullNode meta (PSumType label
   binds <- concat <$> zipWithM createBinds types patterns
   foldM_ (\acc el -> if S.member el acc then throwError'' (getMetadata el) "TYPE ERROR: Repeated bind found" else pure $ S.insert el acc) S.empty $ map fst binds
   pure binds
-createBinds (FullNode _ TInteger) (FullNode _ (PLiteral (FullNode _ (LInteger _)))) = pure []
-createBinds (FullNode _ TRational) (FullNode _ (PLiteral (FullNode _ (LRational _)))) = pure []
-createBinds (FullNode _ TString) (FullNode _ (PLiteral (FullNode _ (LString _)))) = pure []
-createBinds (FullNode _ TBool) (FullNode _ (PLiteral (FullNode _ (LBool _)))) = pure []
-createBinds (FullNode _ TUnit) (FullNode _ (PLiteral (FullNode _ LUnit))) = pure []
+createBinds (FullNode _ TInteger) (FullNode _ (PLiteral (LInteger _))) = pure []
+createBinds (FullNode _ TRational) (FullNode _ (PLiteral (LRational _))) = pure []
+createBinds (FullNode _ TString) (FullNode _ (PLiteral (LString _))) = pure []
+createBinds (FullNode _ TBool) (FullNode _ (PLiteral (LBool _))) = pure []
+createBinds (FullNode _ TUnit) (FullNode _ (PLiteral LUnit)) = pure []
 createBinds type' pattern' = throwError'' (getMetadata pattern') $ printf "TYPE ERROR: Pattern %s not valid for type %s" (show pattern') (show type')
 
 getInitialPatternMatchState :: Type -> PatternMatchState
@@ -105,12 +105,12 @@ getNextPatternMatchState state (FullNode _ (PDisjunctive firstPattern secondPatt
   nextState <- getNextPatternMatchState state firstPattern
   getNextPatternMatchState nextState secondPattern
 getNextPatternMatchState state (FullNode _ (PAs pattern' _)) = getNextPatternMatchState state pattern'
-getNextPatternMatchState (SBool Nothing) (FullNode _ (PLiteral (FullNode _ (LBool value)))) = pure $ SBool (Just value)
-getNextPatternMatchState state@(SBool (Just pastBool)) pattern'@(FullNode _ (PLiteral (FullNode _ (LBool value)))) = do
+getNextPatternMatchState (SBool Nothing) (FullNode _ (PLiteral (LBool value))) = pure $ SBool (Just value)
+getNextPatternMatchState state@(SBool (Just pastBool)) pattern'@(FullNode _ (PLiteral ((LBool value)))) = do
   if pastBool == value
   then printWarning pattern' (printf "Pattern %s is unreachable" (show pattern')) >> pure state
   else pure SSatisfied
-getNextPatternMatchState state@(SInt previousIntegers) pattern'@(FullNode _ (PLiteral (FullNode _ (LInteger value)))) = do
+getNextPatternMatchState state@(SInt previousIntegers) pattern'@(FullNode _ (PLiteral (LInteger value))) = do
   case find (==value) previousIntegers of
     Just _ -> printWarning pattern' (printf "Pattern %s is unreachable" (show pattern')) >> pure state
     Nothing -> pure . SInt $ value : previousIntegers
@@ -339,7 +339,7 @@ typeCheckExpression env (FullNode meta (EAnonymousRecord fields)) = do
   pure . FullNode meta $ TAnonymousRecord (sortOn fst (zip labels types))
   
 typeCheckExpression _ (FullNode meta (ELiteral literal)) =
-  case removeMetadata literal of
+  case literal of
     LUnit -> pure $ FullNode meta TUnit
     LInteger _ -> pure $ FullNode meta TInteger
     LRational _ -> pure $ FullNode meta TRational
@@ -380,7 +380,7 @@ typeCheckExpression env@TyperEnv{..} (FullNode _ (EAbstraction label t returnTyp
                               reducedResultType = reduceType resultType
                           if reducedAnnotatedType == reducedResultType
                           then pure . FullNode meta $ TArrow type' potentialAlias
-                          else throwError'' meta $ printf "TYPE ERROR 1: Body type %s does not match annotated return type %s." (show potentialAlias) (show resultType)
+                          else throwError'' (getMetadata potentialAlias) $ printf "TYPE ERROR 1: Body type %s does not match annotated return type %s." (show potentialAlias) (show resultType)
                         (FullNode meta other) -> throwError'' meta $ printf "KIND ERROR: Annotated return type should have kind * but it has %s" (show other)
         Nothing -> pure . FullNode meta' $ TArrow type' resultType
     (FullNode meta' other) -> throwError'' meta' $ printf "KIND ERROR: Expected parameter to have kind * but it has %s." (show other)
@@ -393,7 +393,8 @@ typeCheckExpression env (FullNode meta (EApplication fun arg)) = do
       let reducedParameterType = reduceType parameterType
       if reducedArgType == reducedParameterType
         then pure resultType
-      else throwError'' (getMetadata reducedArgType) $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
+      else do
+        throwError'' (getMetadata arg) $ printf "TYPE ERROR: Type mismatch between parameter of type %s and argument of type %s." (show parameterType) (show reducedArgType)
     _ -> throwError'' meta $ printf "TYPE ERROR: Attempted to apply a value %s that it is not a function." (show reducedFunType)
 
 typeCheckExpression env (FullNode meta (ECondition cond thenBranch elseBranch)) = do
@@ -408,7 +409,7 @@ typeCheckExpression env (FullNode meta (ECondition cond thenBranch elseBranch)) 
       if reducedThenType == reducedElseType
         then pure thenBranchType
         else throwError'' meta' $ printf "TYPE ERROR: Type mismatch between then branch of type %s and else branch of type %s." (show thenBranchType) (show elseBranchType)
-    _ -> throwError'' meta $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show condType)
+    _ -> throwError'' (getMetadata cond) $ printf "TYPE ERROR: Predicate of type %s needs to be a boolean in if-expression." (show condType)
 
 -- TODO: We should kind check the return type in the type annotation to provide better error messages
 typeCheckExpression env@TyperEnv{..} (FullNode meta (ETypeAbstraction label kind returnType body)) = do

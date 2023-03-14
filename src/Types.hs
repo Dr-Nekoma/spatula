@@ -2,6 +2,8 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE InstanceSigs #-}
 module Types ( 
   typeSubstitution,
   extractName,
@@ -36,10 +38,11 @@ module Types (
   getMetadata,
   makeEmptyNode,
   makeNamedMetadata,
+  puts,
   Field) where
 
 import Data.Text.Arbitrary ( Text )
-import Data.Text ( unpack, append )
+import Data.Text ( unpack, append, pack )
 import Text.Printf ( printf )
 import System.Random
 import Data.Bifunctor(Bifunctor(second))
@@ -286,7 +289,7 @@ data Pattern' =
     PSumType Label [Pattern]
   | PVariable Label
   | PWildcard
-  | PLiteral Literal
+  | PLiteral Literal'
   | PDisjunctive Pattern Pattern
   | PAs Pattern Label
   deriving (Eq, Show)
@@ -294,7 +297,7 @@ data Pattern' =
 type Expression = FullNode Expression'
 
 data Expression'
-    = ELiteral Literal
+    = ELiteral Literal'
     | EVariable (FullNode Text)
     | EOperation Operator [Expression]
     | ELet LetSort [(FullNode Text, Expression)] Expression -- What about kind checking this?
@@ -325,7 +328,11 @@ makeNamedMetadata :: String -> Metadata
 makeNamedMetadata = initialPos
 
 instance (Show a) => Show (FullNode a) where
-  show (FullNode _ a) = show a
+  show (FullNode m a) = "(" <> (show a) <> " | " <> (show m) <> ")"
+--  show (FullNode _ a) = show a
+
+puts :: (Show a) => FullNode a -> Text
+puts (FullNode m a) = "(" <> pack (show a) <> " | " <> pack (show m) <> ")"
 
 instance Functor FullNode where
   fmap f (FullNode m v) = FullNode m (f v)

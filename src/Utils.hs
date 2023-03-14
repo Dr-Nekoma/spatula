@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-module Utils ( Result, ResultT, throwError', throwError'', throwErrorMessage, buildMessage, buildError, printMessage, addErrorColor, addSuccessColor, printWarning, printWarning' ) where
+module Utils ( Result, ResultT, throwError', throwError'', throwErrorMessage, buildMessage, buildError, printMessage, addErrorColor, addSuccessColor, printWarning, printWarning'
+             , buildMessage') where
 
 import Control.Monad.Except
 import Data.String ( IsString(..) )
@@ -33,8 +34,11 @@ buildLocation meta = "In " ++ file ++ " | line " ++ show line ++ ", column " ++ 
 buildError :: (Show a) => a -> T.Text
 buildError error' = T.pack $ "\ESC[91m" <> show error'
 
-buildMessage :: (Show a ) => a -> T.Text
+buildMessage :: (Show a) => a -> T.Text
 buildMessage something = T.pack $ "\ESC[94m" <> show something
+
+buildMessage' :: (Show a) => FullNode a -> T.Text
+buildMessage' something = "\ESC[94m" <> puts something
 
 addErrorColor :: Text -> Text
 addErrorColor = (<>) "\ESC[91m"

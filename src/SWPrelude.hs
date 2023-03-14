@@ -134,10 +134,10 @@ foldType =
                                          (makeEmptyNode $ TVariable (makeEmptyNode $ Name "B"))))))
 
 boolean :: Bool -> Value
-boolean = makeEmptyNode . VLiteral . makeEmptyNode . LBool
+boolean = makeEmptyNode . VLiteral . LBool
 
 stringToInteger :: Value -> ResultT Value
-stringToInteger (FullNode meta (VLiteral (FullNode meta' (LString str)))) = pure . FullNode meta . VLiteral . FullNode meta' . LInteger . read $ unpack str
+stringToInteger (FullNode meta (VLiteral (LString str))) = pure . FullNode meta . VLiteral . LInteger . read $ unpack str
 stringToInteger _ = fail "Function 'stringToInteger' can only be used on strings"
 
 isEmpty :: Value -> ResultT Value
@@ -164,19 +164,19 @@ safeRead path = (fmap (Just . pack) $ readFile path) `catch` handleExists
       | otherwise = throwIO e
 
 readLines :: Value -> ResultT Value
-readLines (FullNode meta (VLiteral (FullNode meta' (LString path)))) = do
+readLines (FullNode meta (VLiteral (LString path))) = do
   maybeContent <- liftIO $ safeRead (unpack path)
   case maybeContent of
-    Nothing -> throwError'' meta' $ printf "Couldn't find file from path %s" (unpack path)
-    Just content -> return . FullNode meta . VList $ map (FullNode meta' . VLiteral . FullNode meta' . LString . pack) (lines $ unpack content)
+    Nothing -> throwError'' meta $ printf "Couldn't find file from path %s" (unpack path)
+    Just content -> return . FullNode meta . VList $ map (FullNode meta . VLiteral . LString . pack) (lines $ unpack content)
 readLines _ = fail ""
 
 readFile' :: Value -> ResultT Value
-readFile' (FullNode meta (VLiteral (FullNode meta' (LString path)))) = do
+readFile' (FullNode meta (VLiteral (LString path))) = do
   maybeContent <- liftIO $ safeRead (unpack path)
   case maybeContent of
-    Nothing -> throwError'' meta' $ printf "Couldn't find file from path %s" (unpack path)
-    Just content -> return . FullNode meta . VLiteral . FullNode meta' $ LString content
+    Nothing -> throwError'' meta $ printf "Couldn't find file from path %s" (unpack path)
+    Just content -> return . FullNode meta . VLiteral $ LString content
 readFile' _ = fail ""
 
 map' :: Value -> ResultT Value
@@ -196,7 +196,7 @@ filter' fun =
          (FullNode meta (VList list'))
            -> FullNode meta . VList
                 . map fst
-                   . filter (\ (_, a) -> a == makeEmptyNode (VLiteral (makeEmptyNode $ LBool True))) . zip list'
+                   . filter (\ (_, a) -> a == makeEmptyNode (VLiteral $ LBool True)) . zip list'
                 <$> for list' fun'
          _ -> fail "Expecting a list as an argument for the filter function"
 
@@ -222,5 +222,5 @@ fold' transform fun =
 
 ourPrint :: Value -> ResultT Value
 ourPrint value = do
-    liftIO $ print value
+    liftIO . print $ removeMetadata value
     return $ makeEmptyNode VUnit

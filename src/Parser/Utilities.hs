@@ -19,6 +19,7 @@ module Parser.Utilities
   , simpleString
   , customParse
   , liftParser
+  , variable
   )
 where
  
@@ -153,9 +154,9 @@ commentLine = liftParser $ string (show LineComment) *> manyTill anyChar (try (c
 
 variable :: ParserT st (FullNode String)
 variable = do
-  str <- many1 (satisfy isAllowed)
+  str <- liftParser $ many1 (satisfy isAllowed)
   notFollowedBy (lookAhead (satisfy (not . isAllowed)))
-  liftParser $ pure str
+  pure str
   
 variableGeneric :: ParserT st (FullNode Text)
 variableGeneric = do

@@ -16,7 +16,7 @@ fileP :: ParserT st [Declaration]
 fileP = manyTill (skip *> declarationP <* skip) eof
 
 declarationP :: ParserT st Declaration
-declarationP = choice $ fmap try [defload, defaliasP, defadtP, defrecordP, defvalP, defunP, defmoduleP, defexpr]
+declarationP = choice $ fmap try [defloadP, defaliasP, defadtP, defrecordP, defvalP, defunP, defmoduleP, defexpr]
 
 defexpr :: ParserT st Declaration
 defexpr = liftParser $ DeclExpr <$> expressionP
@@ -42,11 +42,10 @@ defadtP = do
       fun (n@(FullNode meta _), kind) acc@(FullNode meta' _) = FullNode meta' $ TAbstraction . FullNode meta $ AbstractionInfo' (Name <$> n) kind acc
   liftParser . pure $ DeclType name t
 
-defload :: ParserT st Declaration
-defload = do
-  void $ openDelimiter *> skip *> string "load" <* skip
-  (FullNode meta _) <- simpleString
-  FullNode meta . DeclLoad <$> (simpleString <* skip <* closeDelimiter)
+defloadP :: ParserT st Declaration
+defloadP = do
+  (FullNode meta _ ) <- liftParser $ openDelimiter *> skip *> string "load" <* skip
+  FullNode meta . DeclLoad <$> simpleString <* skip <* closeDelimiter
 
 defaliasP :: ParserT st Declaration
 defaliasP = do
@@ -82,12 +81,12 @@ getFunType args returnType =
 
 defunP :: ParserT st Declaration
 defunP = do
-  void $  openDelimiter *> skip *> string "defun" <* skip
+  (FullNode origin _) <- liftParser $ openDelimiter *> skip *> string "defun" <* skip
   name <- variableGeneric <* skip
   args <- arguments
   (returnType@(FullNode meta' _), body) <- (,) <$> (skip *> char ':' *> skip *> typeP <* skip) <*> many1 (expressionP <* skip) <* closeDelimiter <* skip
   let (FullNode meta _) = head body
-  liftParser . pure $ DeclFun name (FullNode meta' (getFunType args returnType)) (FullNode meta (foldArgs args (Just returnType) body))
+  pure . FullNode origin $ DeclFun name (FullNode meta' (getFunType args returnType)) (FullNode meta (foldArgs args (Just returnType) body))
 
 defmoduleP :: ParserT st Declaration
 defmoduleP = do
