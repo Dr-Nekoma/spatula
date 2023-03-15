@@ -32,7 +32,6 @@
     (modify-syntax-entry ?! "'" table) ; => #[1 2 ![+ 1 2]]
     (modify-syntax-entry ?@ "'" table)
     ;; Others
-    (modify-syntax-entry ?\;  "< 123" table)
     (modify-syntax-entry ?\n ">" table) ; comment end
     (modify-syntax-entry ?\" "\"" table) ; string
     (modify-syntax-entry ?\\ "\\" table) ; escape
@@ -40,20 +39,25 @@
 
 (eval-and-compile
   (defconst silverware-keywords
-    '("if" "match" "defun" "do" "open" "defalgebraic" "defmacro" "lambda" "and" "or"
-      "Unit" "Integer" "Rational" "String" "Bool" "let-in" "let-plus" "forall"
-      "+" "-" "*" "/" "=" "print" "define" "defalias"
-      "defrecord" "begin" "call" "->" "rec" "list" "quote" "#" "@" "!")))
+    '("if" "match" "defun" "load" "defalgebraic" "lambda" "nil"
+      "let-in" "let-plus" "forall" "define" "defalias" "defrecord"
+      "progn" "#" "@" "!"))
+  (defconst silverware-types
+    '("Unit" "Integer" "Rational" "String" "Bool" "List" "->"))
+  (defconst silverware-kind
+    '("Star")))
 
 (defconst silverware-highlights
-  `((,(regexp-opt silverware-keywords 'symbols) . font-lock-keyword-face)))
+  `(("//.*" . font-lock-comment-face)
+    (,(regexp-opt silverware-keywords 'symbols) . font-lock-keyword-face)
+    (,(regexp-opt silverware-types 'symbols) . font-lock-type-face)
+    (,(regexp-opt silverware-kind 'symbols) . font-lock-warning-face)))
 
 (defun silverware-mode-variables ()
   "Setup variables for Silverware mode."
-  (setq-local comment-start-skip
-	      "\\(\\(^\\|[^\\\n]\\)\\(\\\\\\\\\\)*\\)\\({;+\\|;}\\) *")
-  (setq-local comment-end-skip "[ \t]*\\(\\s>\\|{;\\)")
-  (setq-local font-lock-comment-end-skip ";}")
+  (setq-local comment-start-skip "{;.*")
+  (setq-local comment-end-skip ".*;}")
+  (setq-local font-lock-comment-end-skip "\\(;}\\)")
   (setq-local indent-line-function #'lisp-indent-line)
   (setq-local fill-paragraph-function 'lisp-fill-paragraph))
 
@@ -61,12 +65,13 @@
 (define-derived-mode silverware-mode prog-mode "Silverware 🥄"
   "Major Mode for editing Silverware source code."
   :syntax-table silverware-mode-syntax-table
+  (silverware-mode-variables)
   (setq font-lock-defaults '(silverware-highlights))
-  (setq-local comment-start "// ")
+  (setq comment-start "//")
+  (setq comment-end "")
   (rainbow-delimiters-mode +1))
 
 ;;;###autoload
-(add-to-list 'auto-mode-alist '("\\.silw\\'" . silverware-mode))
 (add-to-list 'auto-mode-alist '("\\.sw\\'" . silverware-mode))
 (add-to-list 'auto-mode-alist '("\\.silverware\\'" . silverware-mode))
 
