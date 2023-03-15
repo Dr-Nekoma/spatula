@@ -49,6 +49,8 @@
 
 (defconst silverware-highlights
   `(("//.*" . font-lock-comment-face)
+    ("{;\\(.\\|\n\\)*;}" . font-lock-comment-face)
+    ("|.*?|" . font-lock-doc-face)        
     (,(regexp-opt silverware-keywords 'symbols) . font-lock-keyword-face)
     (,(regexp-opt silverware-types 'symbols) . font-lock-type-face)
     (,(regexp-opt silverware-kind 'symbols) . font-lock-warning-face)))

@@ -30,11 +30,6 @@
 
 // Part 2
 
-{;
-Pay attention to the new carrier.
-It it just another type alias with the same ElfCarrier record!
-;}
-
 [defalgebraic Triplet (Values Integer Integer Integer)]
 
 [defalias TripleElfCarrier |ElfCarrier Triplet|]
