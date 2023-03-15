@@ -40,7 +40,7 @@
 
 [defun update-triplet [(candidate Integer)
        		       (elf-triplet TripleElfCarrier)]
-		       : TripleElfCarrier
+                       : TripleElfCarrier
       [let-in [[triplet [getr elf-triplet currentMax]]]
 	[match triplet
 	 [[!Values [first] [second] [third]]
