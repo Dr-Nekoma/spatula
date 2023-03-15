@@ -39,8 +39,8 @@
 [define third-value 0]
 
 [defun update-triplet [(candidate Integer)
-       		       (elf-triplet TripleElfCarrier)]
-                       : TripleElfCarrier
+		       (elf-triplet TripleElfCarrier)]
+  : TripleElfCarrier
       [let-in [[triplet [getr elf-triplet currentMax]]]
 	[match triplet
 	 [[!Values [first] [second] [third]]
@@ -58,7 +58,7 @@
 
 [defun aux-fold-2 [(str-calories String)
                    (accumulator TripleElfCarrier)]
-  		   : TripleElfCarrier
+  : TripleElfCarrier
   [if [= str-calories ""]
      [let-in [[new-accumulator [setr accumulator [(current 0)]]]
               [candidate [getr accumulator current]]]
