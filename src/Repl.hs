@@ -70,8 +70,8 @@ replSucess = liftRepl . TIO.putStrLn . addSuccessColor
 genericReplError :: Show a => a -> ReplT ()
 genericReplError = liftRepl . TIO.putStrLn . buildError
 
-genericReplSuccess :: Show a => a -> ReplT ()
-genericReplSuccess = liftRepl . TIO.putStrLn . buildMessage
+genericReplSuccess :: Show a => FullNode  a -> ReplT ()
+genericReplSuccess = liftRepl . TIO.putStrLn . buildMessage . removeMetadata
 
 replMessage :: (Show a, Show b) => Either a b -> ReplT ()
 replMessage = liftRepl . printMessage
@@ -117,9 +117,9 @@ singleExecution content = do
 getEnv :: ReplT ()
 getEnv = do
    (typerEnv, evalEnv) <- get
-   genericReplSuccess typerEnv
-   genericReplSuccess ("----------------" :: String)
-   genericReplSuccess evalEnv
+   genericReplSuccess $ makeEmptyNode typerEnv
+   genericReplSuccess $ makeEmptyNode ("----------------" :: String)
+   genericReplSuccess $ makeEmptyNode evalEnv
 
 getKind :: String -> ReplT ()
 getKind content = do
