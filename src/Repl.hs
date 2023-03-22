@@ -14,6 +14,7 @@ import Parser
 import Text.Parsec (parse, ParseError)
 import Data.List ( stripPrefix, find )
 import Data.Text (Text, unpack)
+import Data.Aeson (encode)
 import Control.Monad 
 import Control.Monad.Except ( runExceptT )
 import Control.Monad.State
@@ -39,6 +40,7 @@ data SpecialOption =
   | Parsed
   | Quit
   | Env
+  | Json
   deriving (Enum, Bounded)
 
 class Options a where  
@@ -52,6 +54,7 @@ instance Options SpecialOption where
   showOptions Quit = (":quit", ":q")
   showOptions Parsed = (":parse ", ":p ")
   showOptions Env = (":env", ":e")
+  showOptions Json = (":json", ":j ")  
   identifyOption str option = (option, msum $ sequence [stripPrefix long, stripPrefix short] str)
     where (long, short) = showOptions option
 
@@ -70,7 +73,7 @@ replSucess = liftRepl . TIO.putStrLn . addSuccessColor
 genericReplError :: Show a => a -> ReplT ()
 genericReplError = liftRepl . TIO.putStrLn . buildError
 
-genericReplSuccess :: Show a => FullNode  a -> ReplT ()
+genericReplSuccess :: Show a => FullNode a -> ReplT ()
 genericReplSuccess = liftRepl . TIO.putStrLn . buildMessage . removeMetadata
 
 replMessage :: (Show a, Show b) => Either a b -> ReplT ()
@@ -139,6 +142,13 @@ getType content = do
       typed <- liftRepl $ runExceptT $ typeCheckExpression typerEnv ast
       either replError genericReplSuccess typed
 
+getJson :: String -> ReplT ()
+getJson content = do
+  case parse expressionP "" content of
+    Left errorParse -> error $ show errorParse
+    Right ast -> do
+      genericReplSuccess $ makeEmptyNode (encode $ removeMetadata ast)
+
 importFile :: FilePath -> ReplT ()
 importFile path = do
   content <- liftRepl $ readFile path
@@ -166,6 +176,7 @@ executeSpecialOption Import = executeCommand importFile
 executeSpecialOption Parsed = executeCommand getParsed
 executeSpecialOption SType = executeCommand getType 
 executeSpecialOption Kind = executeCommand getKind
+executeSpecialOption Json = executeCommand getJson
 executeSpecialOption Env = executeCommand (const getEnv)
 
 flushRepl :: ReplT ()

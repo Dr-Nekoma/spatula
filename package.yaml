@@ -37,6 +37,8 @@ dependencies:
 - haskeline >= 0.8.2 
 - random
 - extra
+- aeson
+- scientific 
 
 ghc-options:
 - -Wall

@@ -42,6 +42,11 @@ module Types (
   Field) where
 
 import Data.Text.Arbitrary ( Text )
+import Data.Aeson.KeyMap
+import Data.String ( IsString(..) )
+import Data.Aeson.Types
+import Data.Aeson
+import Data.Scientific
 import Data.Text ( unpack, append, pack )
 import Text.Printf ( printf )
 import System.Random
@@ -49,6 +54,7 @@ import Data.Bifunctor(Bifunctor(second))
 import Text.Parsec
 import Text.Parsec.Pos (initialPos)
 
+-- TODO: Fix this function to use a random process
 refresh :: TVariableInfo -> TVariableInfo
 refresh = id
 
@@ -95,6 +101,10 @@ data Kind' =
   | ArrowK Kind Kind
   deriving (Eq, Ord)
 
+instance ToJSON Kind' where
+  toJSON StarK = Object $ singleton (fromString "kind") (String "star")
+  toJSON k@(ArrowK _ _) = Object $ singleton (fromString "kind") (String . pack $ show k)
+
 instance Show Kind' where
   show StarK = "Star"
   show (ArrowK kind1 kind2) =
@@ -112,6 +122,11 @@ type AbstractionInfo = FullNode AbstractionInfo'
 
 data AbstractionInfo' = AbstractionInfo' TVariableInfo Kind Type
   deriving Ord
+
+instance ToJSON AbstractionInfo' where
+  toJSON (AbstractionInfo' tvi k t) = Object $ fromList [(fromString "type-variable", toJSON $ removeMetadata tvi),
+                                                         (fromString "kind", toJSON $ removeMetadata k),
+                                                         (fromString "type", toJSON $ removeMetadata t)]
 
 instance Show AbstractionInfo' where
   show (AbstractionInfo' label kind type') = printf "%s. %s; %s" (unpack $ extractName (removeMetadata label)) (show kind) (show type')
@@ -133,6 +148,10 @@ type TListInfo = FullNode TListInfo'
 data TListInfo' = TListInfo' (Maybe Type)
   deriving Ord
 
+instance ToJSON TListInfo' where
+  toJSON (TListInfo' Nothing) = Null
+  toJSON (TListInfo' (Just (FullNode _ type'))) = toJSON type'
+
 instance Eq TListInfo' where
   (TListInfo' Nothing) == _ = True
   _ == (TListInfo' Nothing) = True
@@ -141,6 +160,10 @@ instance Eq TListInfo' where
 type TVariableInfo = FullNode TVariableInfo' 
 
 data TVariableInfo' = Name Text | NameId (Text, Int) deriving Eq
+
+instance ToJSON TVariableInfo' where
+  toJSON (Name text) = String text
+  toJSON (NameId (text, iD)) = Object $ fromList [(fromString $ unpack text, Number $ fromIntegral iD)]
 
 extractName :: TVariableInfo' -> Text
 extractName (Name name) = name
@@ -177,6 +200,32 @@ data Type'
     | TAlgebraic [(FullNode Text, [Type])]
     deriving (Eq, Ord)
 
+instance ToJSON Type' where
+  toJSON TUnit = Object $ singleton (fromString "type") (String "unit")
+  toJSON TInteger = Object $ singleton (fromString "type") (String "integer")
+  toJSON TRational = Object $ singleton (fromString "type") (String "rational")
+  toJSON TBool = Object $ singleton (fromString "type") (String "boolean")
+  toJSON TString = Object $ singleton (fromString "type") (String "string")
+  toJSON (TList (FullNode _ tListInfo)) = Object $ singleton (fromString "type") (String $ (pack . show $ toJSON tListInfo) <> " list")
+  toJSON (TAnonymousRecord []) = Object $ singleton (fromString "type") (String "nil anonymous-record")
+  toJSON (TAnonymousRecord list) = Object $ Prelude.foldr (\(FullNode _ label, FullNode _ type') acc -> insert (fromString $ unpack label) (toJSON type') acc) initial list
+     where initial = insert (fromString "type") (String "anonymous-record") empty
+  toJSON (TNominalRecord (FullNode _ label) []) = Object $ insert (fromString "name") (String label) $ singleton (fromString "type") (String "nil nominal-record")
+  toJSON (TNominalRecord (FullNode _ label) list) = Object $ Prelude.foldr (\(FullNode _ label, FullNode _ type') acc -> insert (fromString $ unpack label) (toJSON type') acc) initial list
+     where initial = insert (fromString "name") (String label) $ singleton (fromString "type") (String "nil nominal-record")
+  toJSON t@(TArrow _ _) = Object $ singleton (fromString "type") (String . pack $ show t)
+  toJSON (TVariable (FullNode _ tvi)) = Object $ singleton (fromString "type") (String $ (pack . show $ toJSON tvi) <> " type-variable")
+  toJSON (TForall (FullNode _ abs)) = Object $ singleton (fromString "type") (String $ (pack . show $ toJSON abs) <> " forall")
+  toJSON t@(TApplication _ _) = Object $ singleton (fromString "type") (String $ (pack . show $ toJSON t) <> " type-application")
+  toJSON (TAbstraction (FullNode _ abs)) = Object $ singleton (fromString "type") (String $ (pack . show $ toJSON abs) <> " type-abstraction")
+  toJSON (TAlias (FullNode _ name) (FullNode _ type')) = Object $ insert (fromString $ unpack name) (String "alias") $ singleton (fromString "type") (toJSON type')
+  toJSON (TAliasPlaceholder (FullNode _ name)) = Object $ singleton (fromString "type") (String "aliasplaceholder")
+  toJSON (TAlgebraic []) = Object $ singleton (fromString "type") (String "nil algebraic")
+  toJSON (TAlgebraic list) = Object $ Prelude.foldr outerFold initial list
+     where initial = insert (fromString "type") (Object $ singleton (fromString "placeholder") (String "algebraic")) empty
+           outerFold (FullNode _ label, types) acc = insert (fromString $ unpack label) (Object $ Prelude.foldr innerFold empty types) acc
+           innerFold (FullNode _ type') acc = insert (fromString "type") (toJSON type') acc
+
 instance Show Type' where
   show TUnit = "Unit"
   show TInteger = "Integer"
@@ -187,9 +236,9 @@ instance Show Type' where
   show (TList (FullNode _ (TListInfo' Nothing))) = "|List|"
   show (TArrow source target) =
     case removeMetadata source of
-      TArrow _ _ -> printf "(%s) -> %s" (show source) (show target)
-      TForall _ -> printf "(%s) -> %s" (show source) (show target)
-      _ ->  printf "%s -> %s" (show source) (show target)
+      TArrow _ _ -> printf "(%s) -> %s" (show $ removeMetadata source) (show $ removeMetadata target)
+      TForall _ -> printf "(%s) -> %s" (show $ removeMetadata source) (show $ removeMetadata target)
+      _ ->  printf "%s -> %s" (show $ removeMetadata source) (show $ removeMetadata target)
   show (TVariable label) = unpack $ extractName (removeMetadata label)
   show (TForall info) = "forall " ++ show info
   show (TApplication fun arg) = printf "|%s %s|" (show fun) (show arg)
@@ -226,6 +275,12 @@ data Literal'
     | LString Text
 --    | LTuple [Expression]
     deriving Eq
+
+instance ToJSON Literal' where
+    toJSON LUnit = Object $ singleton (fromString "literal") (String "unit")
+    toJSON (LInteger n) = Number (fromIntegral n)
+    toJSON (LRational n) = Number (unsafeFromRational n)
+    toJSON (LString t) = String t
 
 instance Show Literal' where
   show LUnit = "()"
@@ -316,6 +371,10 @@ data Expression'
     | EAlgebraic Label [Expression]
     | EPatternMatching Expression [(Pattern, Maybe Expression, Expression)] 
     deriving (Eq, Show)
+
+instance ToJSON Expression' where
+    toJSON (ELiteral literal) = toJSON literal
+    toJSON _ = emptyObject
 
 type Metadata = SourcePos
 
