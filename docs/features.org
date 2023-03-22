@@ -1,5 +1,3 @@
-#+TITLE: Silverware Plus Desirable Features
-
 * Phase 1 (5 m.) | 30/09/2022 - XX/XX/XXXX 
 ** DONE Silverware 90% backwards compatibility
 ** DONE Let bindings
