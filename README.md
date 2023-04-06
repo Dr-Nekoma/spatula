@@ -2,12 +2,11 @@
 
 <p align="center">
 	<a href="https://www.youtube.com/playlist?list=PLafNlGaxdt66WWTrO9MbPFXniCxgoX0CH">
-		<figure>
 		<img src="./assets/logo.png" width="200" height="200">
-		<figcaption>Silverware for the Daily Meal</figcaption>
-		</figure>
 	</a>
 </p>
+
+## Silverware for the Daily Meal
 
 Spatula is an interpreter for the Silverware+ programming language, a lightly Lisp-inspired programming language. It is a noticeable improvement in comparison
 with [Silverware](https://github.com/Dr-Nekoma/spoon). The plus version of the language adds several new features,
