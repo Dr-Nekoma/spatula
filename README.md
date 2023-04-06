@@ -1,39 +1,44 @@
-#+TITLE: Spatula
+# Spatula
 
-#+CAPTION: Silverware for the Daily Meal
-#+ATTR_HTML: :width 200px :height 200px  
-[[assets/logo.png]]
+<p align="center">
+	<a href="https://www.youtube.com/playlist?list=PLafNlGaxdt66WWTrO9MbPFXniCxgoX0CH">
+		<figure>
+		<img src="./assets/logo.png" width="200" height="200">
+		<figcaption>Silverware for the Daily Meal</figcaption>
+		</figure>
+	</a>
+</p>
 
 Spatula is an interpreter for the Silverware+ programming language, a lightly Lisp-inspired programming language. It is a noticeable improvement in comparison
-with [[https://github.com/Dr-Nekoma/spoon][Silverware]]. The plus version of the language adds several new features,
+with [Silverware](https://github.com/Dr-Nekoma/spoon). The plus version of the language adds several new features,
 such as Records (both Nominal and Anonymous), Algebraic Data Types (ADTs), Pattern Matching, and Parametric Polymorphism.
   
-** How to use Spatula 
+## How to use Spatula 
 
 Multiple flags are available for spatula, including passing a file for execution as well as using special flags for debugging purposes. Use
 `--help` to expose all the flags.
 
-*** Nix
+## Nix
 
-#+BEGIN_SRC shell
+```shell
   nix build
-#+END_SRC
+```
 
-#+BEGIN_SRC shell
+```shell
   nix develop
-#+END_SRC
+```
 
-*** Stack
+## Stack
 
-#+BEGIN_SRC shell
+```shell
   stack build
-#+END_SRC
+```
 
-#+BEGIN_SRC shell
+```shell
   stack repl
-#+END_SRC
+```
 
-** Developers
+## Developers
 
 - EduardoLR10
 - ribeirotomas1904
@@ -41,6 +46,6 @@ Multiple flags are available for spatula, including passing a file for execution
 
 Honorable mention to mtrsk for helping us with the Nix infrastructure.
   
-** Dr.Nekoma
+## Dr.Nekoma
 
-Built live on [[https://www.twitch.tv/drnekoma][twitch]] and archived on [[https://www.youtube.com/channel/UCMyzdYsPiBU3xoqaOeahr6Q][youtube]]
+Built live on [twitch](https://www.twitch.tv/drnekoma) and archived on [youtube](https://www.youtube.com/channel/UCMyzdYsPiBU3xoqaOeahr6Q)
